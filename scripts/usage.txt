@@ -1,0 +1,3 @@
+./scripts/migrate.sh add some_new_column   # creates a new timestamped file in migrations/
+./scripts/migrate.sh run                    # applies any pending migrations by hand
+./scripts/migrate.sh info                   # shows which migrations have/haven't run

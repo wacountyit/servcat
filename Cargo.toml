@@ -1,0 +1,55 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/model",
+    "crates/db",
+    "crates/connectors",
+    "crates/workflow-engine",
+    "crates/approvals",
+    "crates/server",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "AGPL-3.0-or-later"
+publish = false
+
+[workspace.dependencies]
+servcat-model = { path = "crates/model" }
+servcat-db = { path = "crates/db" }
+servcat-connectors = { path = "crates/connectors" }
+servcat-workflow-engine = { path = "crates/workflow-engine" }
+servcat-approvals = { path = "crates/approvals" }
+
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde", "clock"], default-features = false }
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+async-trait = "0.1"
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls",
+    "mysql",
+    "chrono",
+    "uuid",
+    "json",
+    "macros",
+    "migrate",
+] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+url = "2"
+base64 = "0.22"
+tera = "1"
+jsonwebtoken = "9"
+argon2 = "0.5"
+rand = "0.8"
+axum = { version = "0.8", features = ["macros"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["cors", "trace", "timeout"] }
+dotenvy = "0.15"

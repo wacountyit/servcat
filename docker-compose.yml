@@ -1,0 +1,98 @@
+name: servcat
+
+services:
+  mariadb:
+    image: mariadb:11
+    container_name: servcat-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASS}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASS}
+    volumes:
+      - servcat_db_data:/var/lib/mysql
+    # Bound to localhost only -- lets scripts/migrate.sh (sqlx-cli, run on
+    # the host) and scripts/backup-db.sh reach it without exposing MariaDB
+    # to the network.
+    ports:
+      - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # A brand-new data volume needs a one-time full initialization
+      # (mysql_install_db-equivalent) that can take well over a minute
+      # before MariaDB can answer any healthcheck at all -- without this,
+      # Compose gives up (5 x 10s) before init even finishes and never
+      # gets the chance to see it come up healthy. Failed checks during
+      # this window don't count against `retries`; a restart (data
+      # already initialized) starts answering in a few seconds either way.
+      start_period: 120s
+
+  app:
+    build: .
+    container_name: servcat-app
+    restart: unless-stopped
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      # Container always listens on 8080 internally (SERVER_BIND_ADDR
+      # below); only the host-side port is configurable, in case 8080 is
+      # already taken by something else on this machine. Set APP_PORT in
+      # .env to change it.
+      - "${APP_PORT:-8080}:8080"
+    environment:
+      DATABASE_URL: mysql://${DB_USER}:${DB_PASS}@mariadb:3306/${DB_NAME}
+      SERVER_BIND_ADDR: 0.0.0.0:8080
+      JWT_SIGNING_SECRET: ${JWT_SIGNING_SECRET}
+      JWT_ACCESS_TOKEN_TTL_SECONDS: ${JWT_ACCESS_TOKEN_TTL_SECONDS:-900}
+      JWT_REFRESH_TOKEN_TTL_SECONDS: ${JWT_REFRESH_TOKEN_TTL_SECONDS:-1209600}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
+      # Seed values, applied once on first startup only -- change the org
+      # name and the local-signup toggle afterwards via
+      # PATCH /admin/settings instead of editing these and restarting.
+      APP_NAME: ${APP_NAME:-ServCat}
+      ALLOW_LOCAL_SIGNUP: ${ALLOW_LOCAL_SIGNUP:-false}
+      UPLOADS_DIR: /app/data/uploads
+      # Microsoft Entra ID (Azure AD) SSO -- all five must be set together
+      # or SSO login is disabled (see crates/server/src/config.rs). Empty
+      # values here are fine when SSO isn't configured yet.
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      AZURE_REDIRECT_URI: ${AZURE_REDIRECT_URI:-}
+      SSO_FRONTEND_REDIRECT_URL: ${SSO_FRONTEND_REDIRECT_URL:-}
+      RUST_LOG: ${RUST_LOG:-info,servcat=debug,sqlx=warn}
+    volumes:
+      - servcat_uploads:/app/data/uploads
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: servcat-caddy
+    restart: unless-stopped
+    profiles: ["caddy"]
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - servcat_caddy_data:/data
+      - servcat_caddy_config:/config
+
+volumes:
+  servcat_db_data:
+  servcat_uploads:
+  servcat_caddy_data:
+  servcat_caddy_config:

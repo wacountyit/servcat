@@ -1,0 +1,15 @@
+[package]
+name = "servcat-approvals"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+servcat-model.workspace = true
+servcat-db.workspace = true
+tokio = { workspace = true, features = ["time"] }
+tracing.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+thiserror.workspace = true
+async-trait.workspace = true
