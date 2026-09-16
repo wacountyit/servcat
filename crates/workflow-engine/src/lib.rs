@@ -17,7 +17,9 @@
 //! describing what the caller must now do or wait for.
 
 use serde_json::{Map, Value as JsonValue};
-use servcat_model::{ApprovalDecision, ApproverResolution, Condition, EndOutcome, Step, StepKind, WorkflowGraph};
+use servcat_model::{
+    ApprovalDecision, ApproverResolution, Condition, EndOutcome, Step, StepKind, WorkflowGraph,
+};
 
 pub type Answers = Map<String, JsonValue>;
 
@@ -33,7 +35,9 @@ pub enum EngineError {
         found: &'static str,
     },
 
-    #[error("step '{step_id}' expects an answer for field '{expected_field_key}', got '{actual_field_key}'")]
+    #[error(
+        "step '{step_id}' expects an answer for field '{expected_field_key}', got '{actual_field_key}'"
+    )]
     UnexpectedField {
         step_id: String,
         expected_field_key: String,
@@ -76,7 +80,9 @@ pub enum Outcome {
 const MAX_AUTO_STEPS: usize = 256;
 
 fn find<'g>(graph: &'g WorkflowGraph, step_id: &str) -> Result<&'g Step, EngineError> {
-    graph.step(step_id).ok_or_else(|| EngineError::UnknownStep(step_id.to_string()))
+    graph
+        .step(step_id)
+        .ok_or_else(|| EngineError::UnknownStep(step_id.to_string()))
 }
 
 fn kind_name(kind: &StepKind) -> &'static str {
@@ -106,17 +112,38 @@ fn eval_condition(condition: &Condition, answers: &Answers) -> bool {
 /// Walks forward from `step_id`, silently resolving any `Branch` nodes,
 /// until it reaches a step that needs external input/action (`Question`,
 /// `WaitForApproval`, `SubmitTicket`) or an `End`.
-fn auto_advance(graph: &WorkflowGraph, mut step_id: String, answers: &Answers) -> Result<(String, Outcome), EngineError> {
+fn auto_advance(
+    graph: &WorkflowGraph,
+    mut step_id: String,
+    answers: &Answers,
+) -> Result<(String, Outcome), EngineError> {
     for _ in 0..MAX_AUTO_STEPS {
         let step = find(graph, &step_id)?;
         match &step.kind {
             StepKind::Question { field_key, .. } => {
-                return Ok((step_id, Outcome::AwaitingAnswer { field_key: field_key.clone() }));
+                return Ok((
+                    step_id,
+                    Outcome::AwaitingAnswer {
+                        field_key: field_key.clone(),
+                    },
+                ));
             }
-            StepKind::Branch { condition, on_true, on_false } => {
-                step_id = if eval_condition(condition, answers) { on_true.clone() } else { on_false.clone() };
+            StepKind::Branch {
+                condition,
+                on_true,
+                on_false,
+            } => {
+                step_id = if eval_condition(condition, answers) {
+                    on_true.clone()
+                } else {
+                    on_false.clone()
+                };
             }
-            StepKind::WaitForApproval { approver_resolution, timeout_seconds, .. } => {
+            StepKind::WaitForApproval {
+                approver_resolution,
+                timeout_seconds,
+                ..
+            } => {
                 return Ok((
                     step_id,
                     Outcome::AwaitingApproval {
@@ -153,7 +180,12 @@ pub fn submit_answer(
     value: JsonValue,
 ) -> Result<(String, Outcome), EngineError> {
     let step = find(graph, current_step_id)?;
-    let StepKind::Question { field_key: expected_field_key, next, .. } = &step.kind else {
+    let StepKind::Question {
+        field_key: expected_field_key,
+        next,
+        ..
+    } = &step.kind
+    else {
         return Err(EngineError::WrongStepKind {
             step_id: current_step_id.to_string(),
             expected: "question",
@@ -180,7 +212,12 @@ pub fn resume_after_approval(
     decision: ApprovalDecision,
 ) -> Result<(String, Outcome), EngineError> {
     let step = find(graph, current_step_id)?;
-    let StepKind::WaitForApproval { on_approve, on_reject, .. } = &step.kind else {
+    let StepKind::WaitForApproval {
+        on_approve,
+        on_reject,
+        ..
+    } = &step.kind
+    else {
         return Err(EngineError::WrongStepKind {
             step_id: current_step_id.to_string(),
             expected: "wait_for_approval",
@@ -237,7 +274,10 @@ mod tests {
                     id: "branch_urgent".into(),
                     label: "Route by urgency".into(),
                     kind: StepKind::Branch {
-                        condition: Condition::Equals { field_key: "urgent".into(), value: JsonValue::Bool(true) },
+                        condition: Condition::Equals {
+                            field_key: "urgent".into(),
+                            value: JsonValue::Bool(true),
+                        },
                         on_true: "submit".into(),
                         on_false: "end_ok".into(),
                     },
@@ -245,12 +285,16 @@ mod tests {
                 Step {
                     id: "submit".into(),
                     label: "Submit ticket".into(),
-                    kind: StepKind::SubmitTicket { next: "end_ok".into() },
+                    kind: StepKind::SubmitTicket {
+                        next: "end_ok".into(),
+                    },
                 },
                 Step {
                     id: "end_ok".into(),
                     label: "Done".into(),
-                    kind: StepKind::End { outcome: EndOutcome::Completed },
+                    kind: StepKind::End {
+                        outcome: EndOutcome::Completed,
+                    },
                 },
             ],
         }
@@ -261,15 +305,26 @@ mod tests {
         let graph = graph_with_branch();
         let (step_id, outcome) = start(&graph).unwrap();
         assert_eq!(step_id, "ask_urgent");
-        assert_eq!(outcome, Outcome::AwaitingAnswer { field_key: "urgent".into() });
+        assert_eq!(
+            outcome,
+            Outcome::AwaitingAnswer {
+                field_key: "urgent".into()
+            }
+        );
     }
 
     #[test]
     fn branch_true_reaches_submit_ticket() {
         let graph = graph_with_branch();
         let mut answers = Answers::new();
-        let (step_id, outcome) =
-            submit_answer(&graph, "ask_urgent", &mut answers, "urgent", JsonValue::Bool(true)).unwrap();
+        let (step_id, outcome) = submit_answer(
+            &graph,
+            "ask_urgent",
+            &mut answers,
+            "urgent",
+            JsonValue::Bool(true),
+        )
+        .unwrap();
         assert_eq!(step_id, "submit");
         assert_eq!(outcome, Outcome::ReadyToSubmitTicket);
     }
@@ -278,17 +333,35 @@ mod tests {
     fn branch_false_skips_ticket_and_finishes() {
         let graph = graph_with_branch();
         let mut answers = Answers::new();
-        let (step_id, outcome) =
-            submit_answer(&graph, "ask_urgent", &mut answers, "urgent", JsonValue::Bool(false)).unwrap();
+        let (step_id, outcome) = submit_answer(
+            &graph,
+            "ask_urgent",
+            &mut answers,
+            "urgent",
+            JsonValue::Bool(false),
+        )
+        .unwrap();
         assert_eq!(step_id, "end_ok");
-        assert_eq!(outcome, Outcome::Finished { outcome: EndOutcome::Completed });
+        assert_eq!(
+            outcome,
+            Outcome::Finished {
+                outcome: EndOutcome::Completed
+            }
+        );
     }
 
     #[test]
     fn wrong_field_key_is_rejected() {
         let graph = graph_with_branch();
         let mut answers = Answers::new();
-        let err = submit_answer(&graph, "ask_urgent", &mut answers, "not_urgent", JsonValue::Bool(true)).unwrap_err();
+        let err = submit_answer(
+            &graph,
+            "ask_urgent",
+            &mut answers,
+            "not_urgent",
+            JsonValue::Bool(true),
+        )
+        .unwrap_err();
         assert!(matches!(err, EngineError::UnexpectedField { .. }));
     }
 
@@ -301,7 +374,9 @@ mod tests {
                     id: "a".into(),
                     label: "A".into(),
                     kind: StepKind::Branch {
-                        condition: Condition::Exists { field_key: "never".into() },
+                        condition: Condition::Exists {
+                            field_key: "never".into(),
+                        },
                         on_true: "b".into(),
                         on_false: "b".into(),
                     },
@@ -310,7 +385,9 @@ mod tests {
                     id: "b".into(),
                     label: "B".into(),
                     kind: StepKind::Branch {
-                        condition: Condition::Exists { field_key: "never".into() },
+                        condition: Condition::Exists {
+                            field_key: "never".into(),
+                        },
                         on_true: "a".into(),
                         on_false: "a".into(),
                     },

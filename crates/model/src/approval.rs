@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{sql_enum::sql_string_enum, Id, Timestamp};
+use crate::{Id, Timestamp, sql_enum::sql_string_enum};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

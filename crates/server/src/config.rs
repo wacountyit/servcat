@@ -60,20 +60,24 @@ fn env_var(key: &str) -> Option<String> {
 
 impl AppConfig {
     pub fn from_env() -> anyhow::Result<Self> {
-        let database_url = env::var("DATABASE_URL").map_err(|_| anyhow::anyhow!("DATABASE_URL must be set"))?;
+        let database_url =
+            env::var("DATABASE_URL").map_err(|_| anyhow::anyhow!("DATABASE_URL must be set"))?;
         let bind_addr: SocketAddr = env::var("SERVER_BIND_ADDR")
             .unwrap_or_else(|_| "0.0.0.0:8080".to_string())
             .parse()
             .map_err(|e| anyhow::anyhow!("invalid SERVER_BIND_ADDR: {e}"))?;
 
-        let jwt_signing_secret =
-            env::var("JWT_SIGNING_SECRET").map_err(|_| anyhow::anyhow!("JWT_SIGNING_SECRET must be set"))?;
+        let jwt_signing_secret = env::var("JWT_SIGNING_SECRET")
+            .map_err(|_| anyhow::anyhow!("JWT_SIGNING_SECRET must be set"))?;
         if jwt_signing_secret.len() < 32 {
             anyhow::bail!("JWT_SIGNING_SECRET must be at least 32 characters");
         }
 
         let access_token_ttl = Duration::from_secs(
-            env::var("JWT_ACCESS_TOKEN_TTL_SECONDS").ok().and_then(|v| v.parse().ok()).unwrap_or(900),
+            env::var("JWT_ACCESS_TOKEN_TTL_SECONDS")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(900),
         );
         let refresh_token_ttl = Duration::from_secs(
             env::var("JWT_REFRESH_TOKEN_TTL_SECONDS")
@@ -90,7 +94,8 @@ impl AppConfig {
             .map(str::to_string)
             .collect();
 
-        let uploads_dir = PathBuf::from(env::var("UPLOADS_DIR").unwrap_or_else(|_| "data/uploads".to_string()));
+        let uploads_dir =
+            PathBuf::from(env::var("UPLOADS_DIR").unwrap_or_else(|_| "data/uploads".to_string()));
 
         let bootstrap_allow_local_signup = env::var("ALLOW_LOCAL_SIGNUP")
             .ok()
@@ -104,9 +109,19 @@ impl AppConfig {
             env_var("AZURE_REDIRECT_URI"),
             env_var("SSO_FRONTEND_REDIRECT_URL"),
         ) {
-            (Some(tenant_id), Some(client_id), Some(client_secret), Some(redirect_uri), Some(frontend_redirect_url)) => {
-                Some(AzureSsoConfig { tenant_id, client_id, client_secret, redirect_uri, frontend_redirect_url })
-            }
+            (
+                Some(tenant_id),
+                Some(client_id),
+                Some(client_secret),
+                Some(redirect_uri),
+                Some(frontend_redirect_url),
+            ) => Some(AzureSsoConfig {
+                tenant_id,
+                client_id,
+                client_secret,
+                redirect_uri,
+                frontend_redirect_url,
+            }),
             (None, None, None, None, None) => None,
             _ => {
                 tracing::warn!(

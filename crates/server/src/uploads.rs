@@ -11,8 +11,12 @@ use uuid::Uuid;
 use crate::error::ApiError;
 
 const MAX_LOGO_BYTES: usize = 5 * 1024 * 1024;
-const ALLOWED_CONTENT_TYPES: &[(&str, &str)] =
-    &[("image/png", "png"), ("image/jpeg", "jpg"), ("image/svg+xml", "svg"), ("image/webp", "webp")];
+const ALLOWED_CONTENT_TYPES: &[(&str, &str)] = &[
+    ("image/png", "png"),
+    ("image/jpeg", "jpg"),
+    ("image/svg+xml", "svg"),
+    ("image/webp", "webp"),
+];
 
 /// Validates and writes an uploaded seal/logo under `uploads_dir/<subdir>/`,
 /// removing whatever file previously occupied that slot (if any -- an org
@@ -34,7 +38,11 @@ pub async fn save_logo(
         .iter()
         .find(|(ct, _)| *ct == content_type)
         .map(|(_, ext)| *ext)
-        .ok_or_else(|| ApiError::BadRequest("logo must be PNG, JPEG, SVG, or WebP (set Content-Type accordingly)".into()))?;
+        .ok_or_else(|| {
+            ApiError::BadRequest(
+                "logo must be PNG, JPEG, SVG, or WebP (set Content-Type accordingly)".into(),
+            )
+        })?;
 
     let dir = uploads_dir.join(subdir);
     tokio::fs::create_dir_all(&dir).await.map_err(|e| {
@@ -62,6 +70,8 @@ pub async fn save_logo(
 /// clearing it.
 pub async fn delete_logo(uploads_dir: &Path, url: Option<&str>) {
     let Some(url) = url else { return };
-    let Some(relative) = url.strip_prefix("/uploads/") else { return };
+    let Some(relative) = url.strip_prefix("/uploads/") else {
+        return;
+    };
     let _ = tokio::fs::remove_file(uploads_dir.join(relative)).await;
 }

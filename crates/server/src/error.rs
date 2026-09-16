@@ -1,7 +1,7 @@
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 use serde_json::json;
 
@@ -58,7 +58,9 @@ impl From<servcat_db::DbError> for ApiError {
     fn from(err: servcat_db::DbError) -> Self {
         tracing::error!(error = %err, "database error");
         match err {
-            servcat_db::DbError::NotFound { entity, id } => ApiError::NotFound(format!("{entity} {id} not found")),
+            servcat_db::DbError::NotFound { entity, id } => {
+                ApiError::NotFound(format!("{entity} {id} not found"))
+            }
             _ => ApiError::Internal,
         }
     }
@@ -70,9 +72,13 @@ impl From<servcat_approvals::ApprovalsError> for ApiError {
         match err {
             E::Db(inner) => inner.into(),
             E::NotFound(id) => ApiError::NotFound(format!("approval {id} not found")),
-            E::AlreadyDecided(_) => ApiError::Conflict("this approval was already decided or has expired".into()),
+            E::AlreadyDecided(_) => {
+                ApiError::Conflict("this approval was already decided or has expired".into())
+            }
             E::NotTheApprover { .. } => ApiError::Forbidden,
-            E::RequesterHasNoManager | E::RequesterHasNoDepartment | E::NoUserWithRoleInDepartment { .. } => {
+            E::RequesterHasNoManager
+            | E::RequesterHasNoDepartment
+            | E::NoUserWithRoleInDepartment { .. } => {
                 tracing::error!(error = %err, "approval routing misconfigured");
                 ApiError::Conflict(
                     "this request can't be routed for approval -- the requester's manager/department/role \

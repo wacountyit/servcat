@@ -12,7 +12,7 @@ mod workflow_definitions;
 
 use std::time::Duration;
 
-use axum::{http::HeaderValue, http::StatusCode, routing::get, Router};
+use axum::{Router, http::HeaderValue, http::StatusCode, routing::get};
 use tower_http::{cors::CorsLayer, timeout::TimeoutLayer, trace::TraceLayer};
 
 use crate::state::AppState;
@@ -33,7 +33,10 @@ pub fn build_router(state: AppState) -> Router {
         .merge(approvals::routes())
         .route("/uploads/{*path}", get(uploads::serve))
         .layer(TraceLayer::new_for_http())
-        .layer(TimeoutLayer::with_status_code(StatusCode::REQUEST_TIMEOUT, Duration::from_secs(30)))
+        .layer(TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            Duration::from_secs(30),
+        ))
         .layer(cors)
         .with_state(state)
 }
@@ -42,7 +45,10 @@ pub fn build_router(state: AppState) -> Router {
 /// all (same-origin and non-browser clients are unaffected) -- safer default
 /// than an accidental wildcard.
 fn build_cors_layer(allowed_origins: &[String]) -> CorsLayer {
-    let origins: Vec<HeaderValue> = allowed_origins.iter().filter_map(|o| o.parse().ok()).collect();
+    let origins: Vec<HeaderValue> = allowed_origins
+        .iter()
+        .filter_map(|o| o.parse().ok())
+        .collect();
     CorsLayer::new()
         .allow_origin(origins)
         .allow_methods(tower_http::cors::Any)

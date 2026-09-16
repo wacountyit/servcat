@@ -25,9 +25,10 @@ pub async fn create(
     .execute(pool)
     .await?;
 
-    get_by_id(pool, id)
-        .await?
-        .ok_or_else(|| DbError::NotFound { entity: "ticket", id: id.to_string() })
+    get_by_id(pool, id).await?.ok_or_else(|| DbError::NotFound {
+        entity: "ticket",
+        id: id.to_string(),
+    })
 }
 
 pub async fn get_by_id(pool: &Pool, id: Uuid) -> Result<Option<Ticket>, DbError> {
@@ -74,7 +75,11 @@ pub async fn mark_failed(pool: &Pool, id: Uuid, error: &str) -> Result<(), DbErr
     Ok(())
 }
 
-pub async fn set_dispatch_status(pool: &Pool, id: Uuid, status: DispatchStatus) -> Result<(), DbError> {
+pub async fn set_dispatch_status(
+    pool: &Pool,
+    id: Uuid,
+    status: DispatchStatus,
+) -> Result<(), DbError> {
     sqlx::query("UPDATE tickets SET dispatch_status = ? WHERE id = ?")
         .bind(status)
         .bind(id)

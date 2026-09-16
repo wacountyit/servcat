@@ -48,9 +48,11 @@ pub fn render(mapping: &FieldMapping, context: &TemplateContext) -> Result<JsonV
     let mut root = Map::new();
 
     for (target_field, template) in mapping.iter() {
-        let rendered = Tera::one_off(template, &context.inner, false).map_err(|source| RenderError::Template {
-            target_field: target_field.clone(),
-            source,
+        let rendered = Tera::one_off(template, &context.inner, false).map_err(|source| {
+            RenderError::Template {
+                target_field: target_field.clone(),
+                source,
+            }
         })?;
         set_dot_path(&mut root, target_field, JsonValue::String(rendered));
     }
@@ -88,7 +90,10 @@ mod tests {
     #[test]
     fn renders_and_nests_dot_paths() {
         let mut fields = HashMap::new();
-        fields.insert("summary".to_string(), "New request: {{ instance.catalog_item_name }}".to_string());
+        fields.insert(
+            "summary".to_string(),
+            "New request: {{ instance.catalog_item_name }}".to_string(),
+        );
         fields.insert("project.key".to_string(), "ITHD".to_string());
         fields.insert("issuetype.name".to_string(), "Task".to_string());
         let mapping = FieldMapping(fields);

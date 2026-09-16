@@ -6,7 +6,7 @@ pub mod webhook;
 use async_trait::async_trait;
 use serde_json::Value as JsonValue;
 
-pub use field_mapping::{render as render_field_mapping, TemplateContext};
+pub use field_mapping::{TemplateContext, render as render_field_mapping};
 pub use glpi::GlpiConnector;
 pub use jira::JiraConnector;
 pub use webhook::WebhookConnector;

@@ -11,14 +11,19 @@ pub enum ApprovalsError {
     #[error("cannot resolve an approver: requester has no department on file")]
     RequesterHasNoDepartment,
 
-    #[error("cannot resolve an approver: no active user holds role '{role:?}' in the requester's department")]
+    #[error(
+        "cannot resolve an approver: no active user holds role '{role:?}' in the requester's department"
+    )]
     NoUserWithRoleInDepartment { role: Role },
 
     #[error("approval {0} was already decided or has expired")]
     AlreadyDecided(uuid::Uuid),
 
     #[error("user {user_id} is not the approver for approval {approval_id}")]
-    NotTheApprover { approval_id: uuid::Uuid, user_id: uuid::Uuid },
+    NotTheApprover {
+        approval_id: uuid::Uuid,
+        user_id: uuid::Uuid,
+    },
 
     #[error("approval {0} not found")]
     NotFound(uuid::Uuid),

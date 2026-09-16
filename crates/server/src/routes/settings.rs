@@ -1,9 +1,9 @@
 use axum::{
+    Json, Router,
     body::Bytes,
     extract::{DefaultBodyLimit, State},
-    http::{header, HeaderMap},
+    http::{HeaderMap, header},
     routing::{get, patch, post},
-    Json, Router,
 };
 use servcat_db::repositories::org_settings;
 use servcat_model::{OrgSettings, PublicConfig, Role, UpdateOrgSettings};
@@ -16,7 +16,10 @@ pub fn routes() -> Router<AppState> {
     Router::new().route("/config", get(public_config)).merge(
         Router::new()
             .route("/admin/settings", patch(update_settings))
-            .route("/admin/settings/logo", post(upload_logo).delete(remove_logo))
+            .route(
+                "/admin/settings/logo",
+                post(upload_logo).delete(remove_logo),
+            )
             .layer(DefaultBodyLimit::max(MAX_LOGO_UPLOAD_BYTES)),
     )
 }
@@ -57,11 +60,24 @@ async fn upload_logo(
     let content_type = content_type(&headers)?;
 
     let current = org_settings::get(&state.pool).await?;
-    let logo_url = uploads::save_logo(&state.uploads_dir, "org", "org", content_type, body, current.logo_url.as_deref()).await?;
-    Ok(Json(org_settings::set_logo_url(&state.pool, Some(&logo_url)).await?))
+    let logo_url = uploads::save_logo(
+        &state.uploads_dir,
+        "org",
+        "org",
+        content_type,
+        body,
+        current.logo_url.as_deref(),
+    )
+    .await?;
+    Ok(Json(
+        org_settings::set_logo_url(&state.pool, Some(&logo_url)).await?,
+    ))
 }
 
-async fn remove_logo(auth_user: AuthUser, State(state): State<AppState>) -> Result<Json<OrgSettings>, ApiError> {
+async fn remove_logo(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+) -> Result<Json<OrgSettings>, ApiError> {
     auth_user.require_role(&[Role::Admin])?;
     let current = org_settings::get(&state.pool).await?;
     uploads::delete_logo(&state.uploads_dir, current.logo_url.as_deref()).await;

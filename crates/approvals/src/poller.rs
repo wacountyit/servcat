@@ -1,7 +1,7 @@
 use std::{sync::Arc, time::Duration};
 
 use async_trait::async_trait;
-use servcat_db::{repositories::approvals as approvals_repo, Pool};
+use servcat_db::{Pool, repositories::approvals as approvals_repo};
 use servcat_model::{ApprovalStatus, PendingApproval};
 
 /// Called once per approval that just auto-expired. The handler is
@@ -35,7 +35,10 @@ pub fn spawn_expiry_poller(
     })
 }
 
-async fn poll_once(pool: &Pool, handler: &dyn ExpiredApprovalHandler) -> Result<(), servcat_db::DbError> {
+async fn poll_once(
+    pool: &Pool,
+    handler: &dyn ExpiredApprovalHandler,
+) -> Result<(), servcat_db::DbError> {
     let expired = approvals_repo::list_expired(pool).await?;
     for approval in expired {
         let flipped = approvals_repo::decide(

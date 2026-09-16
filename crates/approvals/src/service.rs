@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
 use chrono::{Duration as ChronoDuration, Utc};
-use servcat_db::{repositories::approvals as approvals_repo, repositories::users, Pool};
+use servcat_db::{Pool, repositories::approvals as approvals_repo, repositories::users};
 use servcat_model::{ApprovalDecision, ApprovalStatus, ApproverResolution, PendingApproval, User};
 use uuid::Uuid;
 
-use crate::{resolution::resolve_approver_user_id, ApprovalNotifier, ApprovalsError};
+use crate::{ApprovalNotifier, ApprovalsError, resolution::resolve_approver_user_id};
 
 /// Resolves `resolution` against `requester`, creates the `PendingApproval`
 /// row, and fires a (best-effort) notification. Does not touch the owning
@@ -24,7 +24,14 @@ pub async fn create_for_instance(
     let approver_user_id = resolve_approver_user_id(pool, requester, resolution).await?;
     let expires_at = timeout_seconds.map(|secs| Utc::now() + ChronoDuration::seconds(secs));
 
-    let approval = approvals_repo::create(pool, workflow_instance_id, step_id, approver_user_id, expires_at).await?;
+    let approval = approvals_repo::create(
+        pool,
+        workflow_instance_id,
+        step_id,
+        approver_user_id,
+        expires_at,
+    )
+    .await?;
 
     if let Some(approver) = users::get_by_id(pool, approver_user_id).await? {
         notifier.notify_new_approval(&approval, &approver).await;
@@ -49,7 +56,10 @@ pub async fn decide(
         .ok_or(ApprovalsError::NotFound(approval_id))?;
 
     if approval.approver_user_id != deciding_user_id {
-        return Err(ApprovalsError::NotTheApprover { approval_id, user_id: deciding_user_id });
+        return Err(ApprovalsError::NotTheApprover {
+            approval_id,
+            user_id: deciding_user_id,
+        });
     }
     if approval.status != ApprovalStatus::Pending {
         return Err(ApprovalsError::AlreadyDecided(approval_id));

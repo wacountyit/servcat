@@ -76,7 +76,11 @@ problem.
 
 ## Before opening a pull request
 
-- `cargo check --workspace` and `cargo test --workspace` both pass.
+- `cargo fmt --all`, `cargo check --workspace`, `cargo clippy --workspace
+  --all-targets -- -D warnings`, and `cargo test --workspace` all pass.
+  `ci.yml` runs all four (plus a Docker build smoke test) on every PR and
+  treats them as required checks, `cargo fmt` included, so it's faster to
+  catch this locally than wait on CI.
 - Note in the PR description: what changed and why, which parts of the
   [manual QA checklist](TESTING.md) you actually ran (not just "should
   work"), and whether the change touches a migration, an env var, or the

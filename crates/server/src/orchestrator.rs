@@ -5,12 +5,14 @@
 
 use serde_json::{Map, Value as JsonValue};
 use servcat_approvals::ApprovalNotifier;
-use servcat_connectors::{render_field_mapping, TemplateContext};
+use servcat_connectors::{TemplateContext, render_field_mapping};
 use servcat_db::{
-    repositories::{catalog, instances, tickets as tickets_repo, users, workflow_definitions},
     Pool,
+    repositories::{catalog, instances, tickets as tickets_repo, users, workflow_definitions},
 };
-use servcat_model::{ApprovalDecision, EndOutcome, InstanceStatus, User, WorkflowDefinition, WorkflowInstance};
+use servcat_model::{
+    ApprovalDecision, EndOutcome, InstanceStatus, User, WorkflowDefinition, WorkflowInstance,
+};
 use servcat_workflow_engine::{self as engine, Outcome};
 use uuid::Uuid;
 
@@ -37,7 +39,9 @@ pub async fn start_instance(
         .await?
         .ok_or_else(|| ApiError::NotFound("service catalog item not found".into()))?;
     if !item.is_active {
-        return Err(ApiError::Conflict("this service is not currently offered".into()));
+        return Err(ApiError::Conflict(
+            "this service is not currently offered".into(),
+        ));
     }
 
     let definition = workflow_definitions::get_by_id(deps.pool, item.workflow_definition_id)
@@ -45,7 +49,8 @@ pub async fn start_instance(
         .ok_or(ApiError::Internal)?;
 
     let (step_id, outcome) = engine::start(&definition.graph)?;
-    let instance = instances::create(deps.pool, definition.id, item.id, requester.id, &step_id).await?;
+    let instance =
+        instances::create(deps.pool, definition.id, item.id, requester.id, &step_id).await?;
 
     apply_outcome(
         deps,
@@ -73,7 +78,9 @@ pub async fn submit_answer(
         return Err(ApiError::Forbidden);
     }
     if instance.status != InstanceStatus::InProgress {
-        return Err(ApiError::Conflict("this request is not currently awaiting input".into()));
+        return Err(ApiError::Conflict(
+            "this request is not currently awaiting input".into(),
+        ));
     }
 
     let definition = workflow_definitions::get_by_id(deps.pool, instance.workflow_definition_id)
@@ -81,10 +88,24 @@ pub async fn submit_answer(
         .ok_or(ApiError::Internal)?;
 
     let mut answers = answers_map(&instance.answers_json);
-    let (step_id, outcome) =
-        engine::submit_answer(&definition.graph, &instance.current_step_id, &mut answers, field_key, value)?;
+    let (step_id, outcome) = engine::submit_answer(
+        &definition.graph,
+        &instance.current_step_id,
+        &mut answers,
+        field_key,
+        value,
+    )?;
 
-    apply_outcome(deps, &definition, instance.id, requester.id, answers, step_id, outcome).await
+    apply_outcome(
+        deps,
+        &definition,
+        instance.id,
+        requester.id,
+        answers,
+        step_id,
+        outcome,
+    )
+    .await
 }
 
 /// Shared by the approvals API route (a human decides) and the expiry
@@ -95,15 +116,27 @@ pub async fn resume_after_approval(
     step_id: &str,
     decision: ApprovalDecision,
 ) -> Result<WorkflowInstance, ApiError> {
-    let instance = instances::get_by_id(deps.pool, instance_id).await?.ok_or(ApiError::Internal)?;
+    let instance = instances::get_by_id(deps.pool, instance_id)
+        .await?
+        .ok_or(ApiError::Internal)?;
     let definition = workflow_definitions::get_by_id(deps.pool, instance.workflow_definition_id)
         .await?
         .ok_or(ApiError::Internal)?;
 
     let answers = answers_map(&instance.answers_json);
-    let (next_step_id, outcome) = engine::resume_after_approval(&definition.graph, step_id, &answers, decision)?;
+    let (next_step_id, outcome) =
+        engine::resume_after_approval(&definition.graph, step_id, &answers, decision)?;
 
-    apply_outcome(deps, &definition, instance.id, instance.requester_user_id, answers, next_step_id, outcome).await
+    apply_outcome(
+        deps,
+        &definition,
+        instance.id,
+        instance.requester_user_id,
+        answers,
+        next_step_id,
+        outcome,
+    )
+    .await
 }
 
 /// Drives `outcome` to the next point that needs external input (or to
@@ -132,8 +165,13 @@ async fn apply_outcome(
                 .ok_or(ApiError::Internal);
             }
 
-            Outcome::AwaitingApproval { resolution, timeout_seconds } => {
-                let requester = users::get_by_id(deps.pool, requester_user_id).await?.ok_or(ApiError::Internal)?;
+            Outcome::AwaitingApproval {
+                resolution,
+                timeout_seconds,
+            } => {
+                let requester = users::get_by_id(deps.pool, requester_user_id)
+                    .await?
+                    .ok_or(ApiError::Internal)?;
                 servcat_approvals::create_for_instance(
                     deps.pool,
                     deps.notifier,
@@ -157,7 +195,10 @@ async fn apply_outcome(
             }
 
             Outcome::ReadyToSubmitTicket => {
-                if let Err(err) = dispatch_ticket(deps, definition, instance_id, requester_user_id, &answers).await {
+                if let Err(err) =
+                    dispatch_ticket(deps, definition, instance_id, requester_user_id, &answers)
+                        .await
+                {
                     instances::save_progress(
                         deps.pool,
                         instance_id,
@@ -175,15 +216,23 @@ async fn apply_outcome(
                 outcome = next_outcome;
             }
 
-            Outcome::Finished { outcome: end_outcome } => {
+            Outcome::Finished {
+                outcome: end_outcome,
+            } => {
                 let status = match end_outcome {
                     EndOutcome::Completed => InstanceStatus::Completed,
                     EndOutcome::Rejected => InstanceStatus::Rejected,
                     EndOutcome::Cancelled => InstanceStatus::Cancelled,
                 };
-                return instances::save_progress(deps.pool, instance_id, &step_id, &JsonValue::Object(answers), status)
-                    .await?
-                    .ok_or(ApiError::Internal);
+                return instances::save_progress(
+                    deps.pool,
+                    instance_id,
+                    &step_id,
+                    &JsonValue::Object(answers),
+                    status,
+                )
+                .await?
+                .ok_or(ApiError::Internal);
             }
         }
     }
@@ -205,13 +254,22 @@ async fn dispatch_ticket(
         ApiError::Internal
     })?;
     let connector = deps.connectors.get(target_system).ok_or_else(|| {
-        tracing::error!(?target_system, "no connector registered for this deployment");
+        tracing::error!(
+            ?target_system,
+            "no connector registered for this deployment"
+        );
         ApiError::Internal
     })?;
 
-    let requester = users::get_by_id(deps.pool, requester_user_id).await?.ok_or(ApiError::Internal)?;
-    let instance = instances::get_by_id(deps.pool, instance_id).await?.ok_or(ApiError::Internal)?;
-    let item = catalog::get_by_id(deps.pool, instance.catalog_item_id).await?.ok_or(ApiError::Internal)?;
+    let requester = users::get_by_id(deps.pool, requester_user_id)
+        .await?
+        .ok_or(ApiError::Internal)?;
+    let instance = instances::get_by_id(deps.pool, instance_id)
+        .await?
+        .ok_or(ApiError::Internal)?;
+    let item = catalog::get_by_id(deps.pool, instance.catalog_item_id)
+        .await?
+        .ok_or(ApiError::Internal)?;
 
     let context = TemplateContext::new(
         &JsonValue::Object(answers.clone()),

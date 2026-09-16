@@ -48,6 +48,11 @@ not cut a `0.1.0` release yet, so everything so far is under "Unreleased."
   `scripts/backup-db.sh`, and `scripts/restore-db.sh`.
 - Project documentation: this file, plus `ARCHITECTURE.md`, `SECURITY.md`,
   `TESTING.md`, and `CONTRIBUTING.md`.
+- CI/CD (`.github/workflows/`): `ci.yml` (`cargo fmt`/`check`/`clippy -D
+  warnings`/`test`, plus a Docker build smoke test, on every PR and push to
+  `main`), `docker-publish.yml` (builds and pushes to GHCR on `main` and
+  version tags, no secrets to configure), and `release.yml` (a version tag
+  builds a standalone release binary and cuts a GitHub Release).
 
 ### Fixed
 
@@ -71,3 +76,8 @@ not cut a `0.1.0` release yet, so everything so far is under "Unreleased."
   prompted by `install.sh` with automatic detection of whether 8080 is
   already taken) instead of hardcoded, since the app container always
   listens on 8080 internally regardless of the host mapping.
+- Ran `cargo fmt --all` across the whole workspace (44 files, whitespace
+  and import-ordering only, no behavior change; verified by an identical
+  `cargo check`/`test`/`clippy` result before and after) so `ci.yml`'s
+  `cargo fmt --all -- --check` job could become a required gate instead of
+  an advisory one.

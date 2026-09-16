@@ -1,4 +1,4 @@
-use axum::{extract::State, routing::post, Json, Router};
+use axum::{Json, Router, extract::State, routing::post};
 use serde::Deserialize;
 use servcat_db::repositories::{org_settings, users};
 use servcat_model::{NewUser, Role};
@@ -23,11 +23,16 @@ struct LoginRequest {
     password: String,
 }
 
-async fn login(State(state): State<AppState>, Json(req): Json<LoginRequest>) -> Result<Json<TokenResponse>, ApiError> {
+async fn login(
+    State(state): State<AppState>,
+    Json(req): Json<LoginRequest>,
+) -> Result<Json<TokenResponse>, ApiError> {
     // Same generic error whether the email doesn't exist, has no local
     // password (SSO-only), is deactivated, or the password is wrong -- avoids
     // confirming to a caller which emails have accounts.
-    let user = users::get_by_email(&state.pool, &req.email).await?.ok_or(ApiError::Unauthorized)?;
+    let user = users::get_by_email(&state.pool, &req.email)
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
     if !user.is_active {
         return Err(ApiError::Unauthorized);
     }
@@ -39,7 +44,11 @@ async fn login(State(state): State<AppState>, Json(req): Json<LoginRequest>) -> 
     }
 
     let (access_token, refresh_token) = auth::issue_token_pair(&state, &user).await?;
-    Ok(Json(TokenResponse { access_token, refresh_token, user: user.into() }))
+    Ok(Json(TokenResponse {
+        access_token,
+        refresh_token,
+        user: user.into(),
+    }))
 }
 
 #[derive(Deserialize)]
@@ -64,10 +73,17 @@ async fn register(
         return Err(ApiError::Forbidden);
     }
     if req.password.len() < 12 {
-        return Err(ApiError::BadRequest("password must be at least 12 characters".into()));
+        return Err(ApiError::BadRequest(
+            "password must be at least 12 characters".into(),
+        ));
     }
-    if users::get_by_email(&state.pool, &req.email).await?.is_some() {
-        return Err(ApiError::Conflict("an account with that email already exists".into()));
+    if users::get_by_email(&state.pool, &req.email)
+        .await?
+        .is_some()
+    {
+        return Err(ApiError::Conflict(
+            "an account with that email already exists".into(),
+        ));
     }
 
     let password_hash = auth::hash_password(&req.password)?;
@@ -87,7 +103,11 @@ async fn register(
     .await?;
 
     let (access_token, refresh_token) = auth::issue_token_pair(&state, &user).await?;
-    Ok(Json(TokenResponse { access_token, refresh_token, user: user.into() }))
+    Ok(Json(TokenResponse {
+        access_token,
+        refresh_token,
+        user: user.into(),
+    }))
 }
 
 #[derive(Deserialize)]
@@ -106,7 +126,11 @@ async fn refresh(
         .ok_or(ApiError::Unauthorized)?;
 
     let (access_token, refresh_token) = auth::issue_token_pair(&state, &user).await?;
-    Ok(Json(TokenResponse { access_token, refresh_token, user: user.into() }))
+    Ok(Json(TokenResponse {
+        access_token,
+        refresh_token,
+        user: user.into(),
+    }))
 }
 
 #[derive(Deserialize)]
@@ -114,7 +138,10 @@ struct LogoutRequest {
     refresh_token: String,
 }
 
-async fn logout(State(state): State<AppState>, Json(req): Json<LogoutRequest>) -> Result<(), ApiError> {
+async fn logout(
+    State(state): State<AppState>,
+    Json(req): Json<LogoutRequest>,
+) -> Result<(), ApiError> {
     // Best-effort: an already-expired/invalid token still "succeeds" from
     // the client's point of view, since the end state (not logged in with
     // that token) is the same either way.

@@ -1,4 +1,4 @@
-use servcat_db::{repositories::users, Pool};
+use servcat_db::{Pool, repositories::users};
 use servcat_model::{ApproverResolution, User};
 use uuid::Uuid;
 
@@ -20,12 +20,15 @@ pub async fn resolve_approver_user_id(
 ) -> Result<Uuid, ApprovalsError> {
     match resolution {
         ApproverResolution::Static { user_id } => Ok(*user_id),
-        ApproverResolution::ManagerOfRequester => {
-            requester.manager_user_id.ok_or(ApprovalsError::RequesterHasNoManager)
-        }
+        ApproverResolution::ManagerOfRequester => requester
+            .manager_user_id
+            .ok_or(ApprovalsError::RequesterHasNoManager),
         ApproverResolution::RoleInDepartment { role } => {
-            let department_id = requester.department_id.ok_or(ApprovalsError::RequesterHasNoDepartment)?;
-            let candidates = users::list_active_by_role_in_department(pool, *role, department_id).await?;
+            let department_id = requester
+                .department_id
+                .ok_or(ApprovalsError::RequesterHasNoDepartment)?;
+            let candidates =
+                users::list_active_by_role_in_department(pool, *role, department_id).await?;
             candidates
                 .first()
                 .map(|u| u.id)

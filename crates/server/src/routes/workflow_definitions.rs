@@ -1,7 +1,7 @@
 use axum::{
+    Json, Router,
     extract::{Path, Query, State},
     routing::{get, post},
-    Json, Router,
 };
 use serde::Deserialize;
 use servcat_db::repositories::workflow_definitions;
@@ -31,7 +31,9 @@ async fn list(
     // Authoring/publishing a graph is an admin concern; only admins need the
     // full list including unpublished drafts.
     auth_user.require_role(&[Role::Admin])?;
-    Ok(Json(workflow_definitions::list(&state.pool, query.published_only).await?))
+    Ok(Json(
+        workflow_definitions::list(&state.pool, query.published_only).await?,
+    ))
 }
 
 async fn create(
@@ -44,13 +46,21 @@ async fn create(
     Ok(Json(created))
 }
 
-async fn publish(auth_user: AuthUser, State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<(), ApiError> {
+async fn publish(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<(), ApiError> {
     auth_user.require_role(&[Role::Admin])?;
     workflow_definitions::set_published(&state.pool, id, true).await?;
     Ok(())
 }
 
-async fn unpublish(auth_user: AuthUser, State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<(), ApiError> {
+async fn unpublish(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<(), ApiError> {
     auth_user.require_role(&[Role::Admin])?;
     workflow_definitions::set_published(&state.pool, id, false).await?;
     Ok(())

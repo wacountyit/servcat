@@ -1,7 +1,7 @@
 use axum::{
+    Json, Router,
     extract::{Path, State},
     routing::{get, post},
-    Json, Router,
 };
 use servcat_db::repositories::instances;
 use servcat_model::{Role, StartWorkflowInstance, SubmitAnswer, WorkflowInstance};
@@ -21,7 +21,11 @@ async fn start(
     State(state): State<AppState>,
     Json(req): Json<StartWorkflowInstance>,
 ) -> Result<Json<WorkflowInstance>, ApiError> {
-    let deps = orchestrator::Deps { pool: &state.pool, notifier: state.notifier.as_ref(), connectors: &state.connectors };
+    let deps = orchestrator::Deps {
+        pool: &state.pool,
+        notifier: state.notifier.as_ref(),
+        connectors: &state.connectors,
+    };
     let instance = orchestrator::start_instance(&deps, req.catalog_item_id, &auth_user.0).await?;
     Ok(Json(instance))
 }
@@ -30,7 +34,9 @@ async fn list_mine(
     auth_user: AuthUser,
     State(state): State<AppState>,
 ) -> Result<Json<Vec<WorkflowInstance>>, ApiError> {
-    Ok(Json(instances::list_for_requester(&state.pool, auth_user.0.id).await?))
+    Ok(Json(
+        instances::list_for_requester(&state.pool, auth_user.0.id).await?,
+    ))
 }
 
 async fn get_one(
@@ -57,7 +63,13 @@ async fn submit_answer(
     Path(id): Path<Uuid>,
     Json(answer): Json<SubmitAnswer>,
 ) -> Result<Json<WorkflowInstance>, ApiError> {
-    let deps = orchestrator::Deps { pool: &state.pool, notifier: state.notifier.as_ref(), connectors: &state.connectors };
-    let instance = orchestrator::submit_answer(&deps, id, &auth_user.0, &answer.field_key, answer.value).await?;
+    let deps = orchestrator::Deps {
+        pool: &state.pool,
+        notifier: state.notifier.as_ref(),
+        connectors: &state.connectors,
+    };
+    let instance =
+        orchestrator::submit_answer(&deps, id, &auth_user.0, &answer.field_key, answer.value)
+            .await?;
     Ok(Json(instance))
 }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{sql_enum::sql_string_enum, Id, Timestamp};
+use crate::{Id, Timestamp, sql_enum::sql_string_enum};
 
 /// Coarse-grained role used for authorization. A user can additionally be the
 /// resolved approver for a specific step without holding the `approver` role

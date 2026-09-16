@@ -1,15 +1,15 @@
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
-use axum::{extract::FromRequestParts, http::request::Parts, RequestPartsExt};
-use axum_extra::headers::{authorization::Bearer, Authorization};
+use axum::{RequestPartsExt, extract::FromRequestParts, http::request::Parts};
 use axum_extra::TypedHeader;
+use axum_extra::headers::{Authorization, authorization::Bearer};
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use servcat_db::{repositories::users, Pool};
+use servcat_db::{Pool, repositories::users};
 use servcat_model::{Role, User, UserProfile};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
@@ -50,10 +50,15 @@ pub fn hash_password(password: &str) -> Result<String, ApiError> {
 
 pub fn verify_password(password: &str, hash: &str) -> Result<bool, ApiError> {
     let parsed = PasswordHash::new(hash).map_err(|_| ApiError::Internal)?;
-    Ok(Argon2::default().verify_password(password.as_bytes(), &parsed).is_ok())
+    Ok(Argon2::default()
+        .verify_password(password.as_bytes(), &parsed)
+        .is_ok())
 }
 
-pub fn issue_access_token(config: &crate::config::AppConfig, user: &User) -> Result<String, ApiError> {
+pub fn issue_access_token(
+    config: &crate::config::AppConfig,
+    user: &User,
+) -> Result<String, ApiError> {
     let now = Utc::now();
     let claims = Claims {
         sub: user.id,
@@ -61,11 +66,18 @@ pub fn issue_access_token(config: &crate::config::AppConfig, user: &User) -> Res
         iat: now.timestamp(),
         exp: (now + ChronoDuration::from_std(config.access_token_ttl).unwrap()).timestamp(),
     };
-    encode(&Header::default(), &claims, &EncodingKey::from_secret(config.jwt_signing_secret.as_bytes()))
-        .map_err(|_| ApiError::Internal)
+    encode(
+        &Header::default(),
+        &claims,
+        &EncodingKey::from_secret(config.jwt_signing_secret.as_bytes()),
+    )
+    .map_err(|_| ApiError::Internal)
 }
 
-fn verify_access_token(config: &crate::config::AppConfig, token: &str) -> Result<(Uuid, Role), ApiError> {
+fn verify_access_token(
+    config: &crate::config::AppConfig,
+    token: &str,
+) -> Result<(Uuid, Role), ApiError> {
     let data = decode::<Claims>(
         token,
         &DecodingKey::from_secret(config.jwt_signing_secret.as_bytes()),
@@ -95,7 +107,8 @@ pub async fn create_session(
     rand::thread_rng().fill_bytes(&mut raw_bytes);
     let raw_token = hex::encode(raw_bytes);
     let token_hash = hash_refresh_token(&raw_token);
-    let expires_at: DateTime<Utc> = Utc::now() + ChronoDuration::from_std(config.refresh_token_ttl).unwrap();
+    let expires_at: DateTime<Utc> =
+        Utc::now() + ChronoDuration::from_std(config.refresh_token_ttl).unwrap();
 
     sqlx::query(
         "INSERT INTO sessions (id, user_id, refresh_token_hash, user_agent, ip_address, expires_at) \
@@ -169,7 +182,10 @@ impl AuthUser {
 impl FromRequestParts<AppState> for AuthUser {
     type Rejection = ApiError;
 
-    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &AppState,
+    ) -> Result<Self, Self::Rejection> {
         let TypedHeader(Authorization(bearer)) = parts
             .extract::<TypedHeader<Authorization<Bearer>>>()
             .await

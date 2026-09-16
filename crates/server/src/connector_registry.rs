@@ -20,29 +20,48 @@ impl ConnectorRegistry {
         if let Some(url) = &config.webhook_url {
             connectors.insert(
                 TargetSystem::Webhook,
-                Arc::new(WebhookConnector::new(url.clone(), config.webhook_bearer_token.clone())),
+                Arc::new(WebhookConnector::new(
+                    url.clone(),
+                    config.webhook_bearer_token.clone(),
+                )),
             );
         }
 
-        if let (Some(base_url), Some(email), Some(api_token)) =
-            (&config.jira_base_url, &config.jira_email, &config.jira_api_token)
-        {
+        if let (Some(base_url), Some(email), Some(api_token)) = (
+            &config.jira_base_url,
+            &config.jira_email,
+            &config.jira_api_token,
+        ) {
             connectors.insert(
                 TargetSystem::Jira,
-                Arc::new(JiraConnector::new(base_url.clone(), email.clone(), api_token.clone())),
+                Arc::new(JiraConnector::new(
+                    base_url.clone(),
+                    email.clone(),
+                    api_token.clone(),
+                )),
             );
         }
 
-        if let (Some(base_url), Some(app_token), Some(user_token)) =
-            (&config.glpi_base_url, &config.glpi_app_token, &config.glpi_user_token)
-        {
+        if let (Some(base_url), Some(app_token), Some(user_token)) = (
+            &config.glpi_base_url,
+            &config.glpi_app_token,
+            &config.glpi_user_token,
+        ) {
             connectors.insert(
                 TargetSystem::Glpi,
-                Arc::new(GlpiConnector::new(base_url.clone(), app_token.clone(), user_token.clone())),
+                Arc::new(GlpiConnector::new(
+                    base_url.clone(),
+                    app_token.clone(),
+                    user_token.clone(),
+                )),
             );
         }
 
-        for target in [TargetSystem::Webhook, TargetSystem::Jira, TargetSystem::Glpi] {
+        for target in [
+            TargetSystem::Webhook,
+            TargetSystem::Jira,
+            TargetSystem::Glpi,
+        ] {
             if !connectors.contains_key(&target) {
                 tracing::info!(?target, "no connector configured for target system");
             }

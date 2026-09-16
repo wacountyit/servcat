@@ -1,0 +1,65 @@
+name: Release
+
+# Fires on a version tag push (git tag v0.1.0 && git push --tags), or can be
+# re-run by hand against an existing tag. Independent of docker-publish.yml,
+# which reacts to the same tag push to build/push the matching image -- both
+# run in parallel, neither depends on the other.
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0). Only needed when re-running by hand."
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      # Release only ever proceeds past a green test run -- tag pushes don't
+      # otherwise trigger ci.yml (it's scoped to main and pull requests), so
+      # this is the only gate a release actually has to pass.
+      - name: Run tests
+        run: cargo test --workspace
+
+      - name: Build release binary
+        run: cargo build --release --workspace --bin servcat-server
+
+      - name: Package binary
+        run: |
+          set -euo pipefail
+          version="${{ inputs.tag || github.ref_name }}"
+          stage="servcat-server-${version}-x86_64-unknown-linux-gnu"
+          mkdir -p "$stage"
+          cp target/release/servcat-server "$stage/"
+          cp README.md LICENSE .env.example "$stage/"
+          tar -czf "${stage}.tar.gz" "$stage"
+          echo "ASSET_PATH=${stage}.tar.gz" >> "$GITHUB_ENV"
+
+      # Migrations are embedded into the binary at compile time
+      # (sqlx::migrate! in crates/db/src/lib.rs), so nothing else needs to
+      # ship alongside it beyond docs and a starting .env template. This is
+      # a bonus artifact for running servcat-server directly; Docker (see
+      # docker-publish.yml) is the primary supported deployment path.
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: ${{ env.ASSET_PATH }}

@@ -28,9 +28,10 @@ pub async fn create(
     .execute(pool)
     .await?;
 
-    get_by_id(pool, id)
-        .await?
-        .ok_or_else(|| DbError::NotFound { entity: "workflow_instance", id: id.to_string() })
+    get_by_id(pool, id).await?.ok_or_else(|| DbError::NotFound {
+        entity: "workflow_instance",
+        id: id.to_string(),
+    })
 }
 
 pub async fn get_by_id(pool: &Pool, id: Uuid) -> Result<Option<WorkflowInstance>, DbError> {
@@ -41,7 +42,10 @@ pub async fn get_by_id(pool: &Pool, id: Uuid) -> Result<Option<WorkflowInstance>
     Ok(instance)
 }
 
-pub async fn list_for_requester(pool: &Pool, requester_user_id: Uuid) -> Result<Vec<WorkflowInstance>, DbError> {
+pub async fn list_for_requester(
+    pool: &Pool,
+    requester_user_id: Uuid,
+) -> Result<Vec<WorkflowInstance>, DbError> {
     let instances = sqlx::query_as::<_, WorkflowInstance>(&format!(
         "{SELECT} WHERE requester_user_id = ? ORDER BY created_at DESC"
     ))
@@ -72,7 +76,10 @@ pub async fn save_progress(
 ) -> Result<Option<WorkflowInstance>, DbError> {
     let is_terminal = matches!(
         status,
-        InstanceStatus::Completed | InstanceStatus::Rejected | InstanceStatus::Cancelled | InstanceStatus::Failed
+        InstanceStatus::Completed
+            | InstanceStatus::Rejected
+            | InstanceStatus::Cancelled
+            | InstanceStatus::Failed
     );
 
     sqlx::query(

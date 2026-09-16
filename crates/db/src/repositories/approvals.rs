@@ -28,9 +28,10 @@ pub async fn create(
     .execute(pool)
     .await?;
 
-    get_by_id(pool, id)
-        .await?
-        .ok_or_else(|| DbError::NotFound { entity: "pending_approval", id: id.to_string() })
+    get_by_id(pool, id).await?.ok_or_else(|| DbError::NotFound {
+        entity: "pending_approval",
+        id: id.to_string(),
+    })
 }
 
 pub async fn get_by_id(pool: &Pool, id: Uuid) -> Result<Option<PendingApproval>, DbError> {
@@ -41,7 +42,10 @@ pub async fn get_by_id(pool: &Pool, id: Uuid) -> Result<Option<PendingApproval>,
     Ok(approval)
 }
 
-pub async fn list_pending_for_approver(pool: &Pool, approver_user_id: Uuid) -> Result<Vec<PendingApproval>, DbError> {
+pub async fn list_pending_for_approver(
+    pool: &Pool,
+    approver_user_id: Uuid,
+) -> Result<Vec<PendingApproval>, DbError> {
     let approvals = sqlx::query_as::<_, PendingApproval>(&format!(
         "{SELECT} WHERE approver_user_id = ? AND status = 'pending' ORDER BY created_at"
     ))

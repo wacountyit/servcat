@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use serde_json::{json, Value as JsonValue};
+use serde_json::{Value as JsonValue, json};
 use servcat_model::TargetSystem;
 
 use crate::{ConnectorError, DispatchResult, TicketConnector};
@@ -19,7 +19,12 @@ pub struct JiraConnector {
 
 impl JiraConnector {
     pub fn new(base_url: String, email: String, api_token: String) -> Self {
-        Self { client: reqwest::Client::new(), base_url: base_url.trim_end_matches('/').to_string(), email, api_token }
+        Self {
+            client: reqwest::Client::new(),
+            base_url: base_url.trim_end_matches('/').to_string(),
+            email,
+            api_token,
+        }
     }
 }
 
@@ -45,13 +50,15 @@ impl TicketConnector for JiraConnector {
         let body: JsonValue = response.json().await.unwrap_or(JsonValue::Null);
 
         if !status.is_success() {
-            return Err(ConnectorError::RejectedByTarget { status: status.as_u16(), body: body.to_string() });
+            return Err(ConnectorError::RejectedByTarget {
+                status: status.as_u16(),
+                body: body.to_string(),
+            });
         }
 
-        let key = body
-            .get("key")
-            .and_then(JsonValue::as_str)
-            .ok_or_else(|| ConnectorError::UnexpectedResponse("missing 'key' in Jira response".into()))?;
+        let key = body.get("key").and_then(JsonValue::as_str).ok_or_else(|| {
+            ConnectorError::UnexpectedResponse("missing 'key' in Jira response".into())
+        })?;
 
         Ok(DispatchResult {
             external_ticket_id: key.to_string(),

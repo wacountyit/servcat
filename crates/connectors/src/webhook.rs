@@ -21,7 +21,11 @@ pub struct WebhookConnector {
 
 impl WebhookConnector {
     pub fn new(url: String, bearer_token: Option<String>) -> Self {
-        Self { client: reqwest::Client::new(), url, bearer_token }
+        Self {
+            client: reqwest::Client::new(),
+            url,
+            bearer_token,
+        }
     }
 }
 
@@ -56,8 +60,14 @@ impl TicketConnector for WebhookConnector {
             .and_then(JsonValue::as_str)
             .map(str::to_string)
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-        let external_ticket_url = body.get("url").and_then(JsonValue::as_str).map(str::to_string);
+        let external_ticket_url = body
+            .get("url")
+            .and_then(JsonValue::as_str)
+            .map(str::to_string);
 
-        Ok(DispatchResult { external_ticket_id, external_ticket_url })
+        Ok(DispatchResult {
+            external_ticket_id,
+            external_ticket_url,
+        })
     }
 }

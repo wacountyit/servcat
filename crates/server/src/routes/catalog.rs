@@ -1,7 +1,7 @@
 use axum::{
+    Json, Router,
     extract::{Path, Query, State},
     routing::{get, patch, post},
-    Json, Router,
 };
 use serde::Deserialize;
 use servcat_db::repositories::catalog;
@@ -30,7 +30,8 @@ async fn list(
 ) -> Result<Json<Vec<ServiceCatalogItem>>, ApiError> {
     // Only admins/agents get to see retired/draft items; everyone else only
     // ever sees what's actually available to request.
-    let include_inactive = query.include_inactive && matches!(auth_user.0.role, Role::Admin | Role::Agent);
+    let include_inactive =
+        query.include_inactive && matches!(auth_user.0.role, Role::Admin | Role::Agent);
     Ok(Json(catalog::list(&state.pool, include_inactive).await?))
 }
 
@@ -40,7 +41,9 @@ async fn create(
     Json(new_item): Json<NewServiceCatalogItem>,
 ) -> Result<Json<ServiceCatalogItem>, ApiError> {
     auth_user.require_role(&[Role::Admin])?;
-    Ok(Json(catalog::create(&state.pool, &new_item, auth_user.0.id).await?))
+    Ok(Json(
+        catalog::create(&state.pool, &new_item, auth_user.0.id).await?,
+    ))
 }
 
 async fn update(
@@ -56,7 +59,11 @@ async fn update(
     Ok(Json(updated))
 }
 
-async fn deactivate(auth_user: AuthUser, State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<(), ApiError> {
+async fn deactivate(
+    auth_user: AuthUser,
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<(), ApiError> {
     auth_user.require_role(&[Role::Admin])?;
     catalog::deactivate(&state.pool, id).await?;
     Ok(())

@@ -17,8 +17,8 @@ use tokio::signal;
 use tracing_subscriber::EnvFilter;
 
 use crate::{
-    config::AppConfig, connector_registry::ConnectorRegistry, expiry_handler::ServerExpiryHandler, sso::SsoService,
-    state::AppState,
+    config::AppConfig, connector_registry::ConnectorRegistry, expiry_handler::ServerExpiryHandler,
+    sso::SsoService, state::AppState,
 };
 
 #[tokio::main]
@@ -28,21 +28,31 @@ async fn main() -> anyhow::Result<()> {
     let _ = dotenvy::dotenv();
 
     tracing_subscriber::fmt()
-        .with_env_filter(EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")))
+        .with_env_filter(
+            EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
+        )
         .init();
 
     let config = Arc::new(AppConfig::from_env()?);
     let pool = servcat_db::connect_and_migrate(&config.database_url).await?;
 
     bootstrap_admin(&pool, &config).await?;
-    org_settings::seed_default(&pool, config.bootstrap_app_name.as_deref(), config.bootstrap_allow_local_signup).await?;
+    org_settings::seed_default(
+        &pool,
+        config.bootstrap_app_name.as_deref(),
+        config.bootstrap_allow_local_signup,
+    )
+    .await?;
 
     let state = AppState {
         pool,
         connectors: Arc::new(ConnectorRegistry::from_config(&config.connectors)),
         notifier: servcat_approvals::default_notifier(),
         uploads_dir: config.uploads_dir.clone(),
-        sso: config.sso.clone().map(|sso_config| Arc::new(SsoService::new(sso_config))),
+        sso: config
+            .sso
+            .clone()
+            .map(|sso_config| Arc::new(SsoService::new(sso_config))),
         config,
     };
 
@@ -56,7 +66,9 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(state.config.bind_addr).await?;
     tracing::info!(addr = %state.config.bind_addr, "servcat-server listening");
 
-    axum::serve(listener, app).with_graceful_shutdown(shutdown_signal()).await?;
+    axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
 
     Ok(())
 }
@@ -66,14 +78,21 @@ async fn main() -> anyhow::Result<()> {
 /// rotated/disabled once real accounts (local or SSO) take over -- see
 /// `.env.example`.
 async fn bootstrap_admin(pool: &servcat_db::Pool, config: &AppConfig) -> anyhow::Result<()> {
-    let (Some(email), Some(password)) = (&config.bootstrap_admin_email, &config.bootstrap_admin_password) else {
+    let (Some(email), Some(password)) = (
+        &config.bootstrap_admin_email,
+        &config.bootstrap_admin_password,
+    ) else {
         return Ok(());
     };
 
     if users::get_by_email(pool, email).await?.is_some() {
         return Ok(());
     }
-    if !users::list(pool, true).await?.iter().all(|u| u.role != Role::Admin) {
+    if !users::list(pool, true)
+        .await?
+        .iter()
+        .all(|u| u.role != Role::Admin)
+    {
         return Ok(());
     }
 
@@ -98,7 +117,11 @@ async fn bootstrap_admin(pool: &servcat_db::Pool, config: &AppConfig) -> anyhow:
 }
 
 async fn shutdown_signal() {
-    let ctrl_c = async { signal::ctrl_c().await.expect("failed to install Ctrl+C handler") };
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler")
+    };
 
     #[cfg(unix)]
     let terminate = async {

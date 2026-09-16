@@ -3,7 +3,8 @@ use uuid::Uuid;
 
 use crate::{DbError, Pool};
 
-const SELECT: &str = "SELECT id, name, logo_url, parent_department_id, created_at, updated_at FROM departments";
+const SELECT: &str =
+    "SELECT id, name, logo_url, parent_department_id, created_at, updated_at FROM departments";
 
 pub async fn create(pool: &Pool, new: &NewDepartment) -> Result<Department, DbError> {
     let id = Uuid::new_v4();
@@ -14,9 +15,10 @@ pub async fn create(pool: &Pool, new: &NewDepartment) -> Result<Department, DbEr
         .execute(pool)
         .await?;
 
-    get_by_id(pool, id)
-        .await?
-        .ok_or_else(|| DbError::NotFound { entity: "department", id: id.to_string() })
+    get_by_id(pool, id).await?.ok_or_else(|| DbError::NotFound {
+        entity: "department",
+        id: id.to_string(),
+    })
 }
 
 pub async fn get_by_id(pool: &Pool, id: Uuid) -> Result<Option<Department>, DbError> {
@@ -37,7 +39,11 @@ pub async fn list(pool: &Pool) -> Result<Vec<Department>, DbError> {
 /// Note: `COALESCE` means `None` in the patch always leaves a field
 /// unchanged; there's currently no way to explicitly clear
 /// `parent_department_id` back to a top-level department through this call.
-pub async fn update(pool: &Pool, id: Uuid, patch: &UpdateDepartment) -> Result<Option<Department>, DbError> {
+pub async fn update(
+    pool: &Pool,
+    id: Uuid,
+    patch: &UpdateDepartment,
+) -> Result<Option<Department>, DbError> {
     sqlx::query(
         "UPDATE departments SET \
             name = COALESCE(?, name), \
@@ -53,7 +59,11 @@ pub async fn update(pool: &Pool, id: Uuid, patch: &UpdateDepartment) -> Result<O
     get_by_id(pool, id).await
 }
 
-pub async fn set_logo_url(pool: &Pool, id: Uuid, logo_url: Option<&str>) -> Result<Option<Department>, DbError> {
+pub async fn set_logo_url(
+    pool: &Pool,
+    id: Uuid,
+    logo_url: Option<&str>,
+) -> Result<Option<Department>, DbError> {
     sqlx::query("UPDATE departments SET logo_url = ? WHERE id = ?")
         .bind(logo_url)
         .bind(id)

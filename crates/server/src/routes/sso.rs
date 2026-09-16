@@ -1,8 +1,8 @@
 use axum::{
+    Json, Router,
     extract::{Query, State},
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
-    Json, Router,
 };
 use serde::Deserialize;
 use servcat_db::repositories::users;
@@ -35,7 +35,10 @@ struct CallbackQuery {
     error_description: Option<String>,
 }
 
-async fn callback(State(state): State<AppState>, Query(query): Query<CallbackQuery>) -> Result<Response, ApiError> {
+async fn callback(
+    State(state): State<AppState>,
+    Query(query): Query<CallbackQuery>,
+) -> Result<Response, ApiError> {
     let sso = state.sso.as_ref().ok_or_else(sso_not_configured)?;
 
     if let Some(error) = query.error {
@@ -43,7 +46,9 @@ async fn callback(State(state): State<AppState>, Query(query): Query<CallbackQue
         return Err(ApiError::Unauthorized);
     }
     let (Some(code), Some(state_param)) = (query.code, query.state) else {
-        return Err(ApiError::BadRequest("missing code/state from Entra ID".into()));
+        return Err(ApiError::BadRequest(
+            "missing code/state from Entra ID".into(),
+        ));
     };
 
     let identity = sso.complete_login(&code, &state_param).await?;
@@ -66,19 +71,30 @@ async fn callback(State(state): State<AppState>, Query(query): Query<CallbackQue
 /// the tenant side) is what makes auto-provisioning safe here -- this is not
 /// the same thing as the local self-registration path, which stays behind
 /// `allow_local_signup`.
-async fn provision_or_link_user(state: &AppState, identity: &AuthenticatedIdentity) -> Result<User, ApiError> {
-    if let Some(user) = users::get_by_external_idp_subject(&state.pool, &identity.external_idp_subject).await? {
+async fn provision_or_link_user(
+    state: &AppState,
+    identity: &AuthenticatedIdentity,
+) -> Result<User, ApiError> {
+    if let Some(user) =
+        users::get_by_external_idp_subject(&state.pool, &identity.external_idp_subject).await?
+    {
         return Ok(user);
     }
 
     if let Some(user) = users::get_by_email(&state.pool, &identity.email).await? {
         if user.external_idp_subject.is_some() {
             tracing::error!(email = %identity.email, "Entra ID login email matches a user already linked to a different subject");
-            return Err(ApiError::Conflict("this email is already linked to a different sign-in method".into()));
+            return Err(ApiError::Conflict(
+                "this email is already linked to a different sign-in method".into(),
+            ));
         }
-        return users::link_external_idp_subject(&state.pool, user.id, &identity.external_idp_subject)
-            .await?
-            .ok_or_else(|| ApiError::NotFound("user not found".into()));
+        return users::link_external_idp_subject(
+            &state.pool,
+            user.id,
+            &identity.external_idp_subject,
+        )
+        .await?
+        .ok_or_else(|| ApiError::NotFound("user not found".into()));
     }
 
     users::create(
@@ -103,13 +119,23 @@ struct SsoTokenRequest {
     code: String,
 }
 
-async fn token(State(state): State<AppState>, Json(req): Json<SsoTokenRequest>) -> Result<Json<TokenResponse>, ApiError> {
+async fn token(
+    State(state): State<AppState>,
+    Json(req): Json<SsoTokenRequest>,
+) -> Result<Json<TokenResponse>, ApiError> {
     let sso = state.sso.as_ref().ok_or_else(sso_not_configured)?;
     let user_id = sso.redeem_handoff_code(&req.code)?;
-    let user = users::get_by_id(&state.pool, user_id).await?.filter(|u| u.is_active).ok_or(ApiError::Unauthorized)?;
+    let user = users::get_by_id(&state.pool, user_id)
+        .await?
+        .filter(|u| u.is_active)
+        .ok_or(ApiError::Unauthorized)?;
 
     let (access_token, refresh_token) = auth::issue_token_pair(&state, &user).await?;
-    Ok(Json(TokenResponse { access_token, refresh_token, user: user.into() }))
+    Ok(Json(TokenResponse {
+        access_token,
+        refresh_token,
+        user: user.into(),
+    }))
 }
 
 fn sso_not_configured() -> ApiError {

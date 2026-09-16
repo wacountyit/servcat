@@ -1,5 +1,7 @@
 use serde_json::Value as JsonValue;
-use servcat_model::{FieldMapping, NewWorkflowDefinition, TargetSystem, WorkflowDefinition, WorkflowGraph};
+use servcat_model::{
+    FieldMapping, NewWorkflowDefinition, TargetSystem, WorkflowDefinition, WorkflowGraph,
+};
 use uuid::Uuid;
 
 use crate::{DbError, Pool};
@@ -22,16 +24,22 @@ impl Row {
     fn into_model(self) -> Result<WorkflowDefinition, DbError> {
         let entity = "workflow_definition";
         let graph: WorkflowGraph =
-            serde_json::from_value(self.definition_json).map_err(|source| DbError::CorruptJson {
-                entity,
-                id: self.id.to_string(),
-                source,
+            serde_json::from_value(self.definition_json).map_err(|source| {
+                DbError::CorruptJson {
+                    entity,
+                    id: self.id.to_string(),
+                    source,
+                }
             })?;
         let field_mapping = self
             .field_mapping_json
             .map(serde_json::from_value::<FieldMapping>)
             .transpose()
-            .map_err(|source| DbError::CorruptJson { entity, id: self.id.to_string(), source })?;
+            .map_err(|source| DbError::CorruptJson {
+                entity,
+                id: self.id.to_string(),
+                source,
+            })?;
 
         Ok(WorkflowDefinition {
             id: self.id,
@@ -57,7 +65,8 @@ pub async fn create(
     created_by: Uuid,
 ) -> Result<WorkflowDefinition, DbError> {
     let id = Uuid::new_v4();
-    let definition_json = serde_json::to_value(&new.graph).expect("WorkflowGraph always serializes");
+    let definition_json =
+        serde_json::to_value(&new.graph).expect("WorkflowGraph always serializes");
     let field_mapping_json = new
         .field_mapping
         .as_ref()
@@ -77,9 +86,10 @@ pub async fn create(
     .execute(pool)
     .await?;
 
-    get_by_id(pool, id)
-        .await?
-        .ok_or_else(|| DbError::NotFound { entity: "workflow_definition", id: id.to_string() })
+    get_by_id(pool, id).await?.ok_or_else(|| DbError::NotFound {
+        entity: "workflow_definition",
+        id: id.to_string(),
+    })
 }
 
 pub async fn get_by_id(pool: &Pool, id: Uuid) -> Result<Option<WorkflowDefinition>, DbError> {

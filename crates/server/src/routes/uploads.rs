@@ -6,14 +6,17 @@
 
 use axum::{
     extract::{Path, State},
-    http::{header, StatusCode},
+    http::{StatusCode, header},
     response::{IntoResponse, Response},
 };
 
 use crate::state::AppState;
 
 pub async fn serve(Path(path): Path<String>, State(state): State<AppState>) -> Response {
-    if path.split('/').any(|segment| segment == ".." || segment.is_empty()) {
+    if path
+        .split('/')
+        .any(|segment| segment == ".." || segment.is_empty())
+    {
         return StatusCode::NOT_FOUND.into_response();
     }
 

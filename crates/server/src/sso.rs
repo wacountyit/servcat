@@ -13,8 +13,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode, decode_header};
 use rand::RngCore;
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
@@ -94,19 +94,31 @@ impl SsoService {
     }
 
     fn authorize_endpoint(&self) -> String {
-        format!("https://login.microsoftonline.com/{}/oauth2/v2.0/authorize", self.config.tenant_id)
+        format!(
+            "https://login.microsoftonline.com/{}/oauth2/v2.0/authorize",
+            self.config.tenant_id
+        )
     }
 
     fn token_endpoint(&self) -> String {
-        format!("https://login.microsoftonline.com/{}/oauth2/v2.0/token", self.config.tenant_id)
+        format!(
+            "https://login.microsoftonline.com/{}/oauth2/v2.0/token",
+            self.config.tenant_id
+        )
     }
 
     fn jwks_endpoint(&self) -> String {
-        format!("https://login.microsoftonline.com/{}/discovery/v2.0/keys", self.config.tenant_id)
+        format!(
+            "https://login.microsoftonline.com/{}/discovery/v2.0/keys",
+            self.config.tenant_id
+        )
     }
 
     fn expected_issuer(&self) -> String {
-        format!("https://login.microsoftonline.com/{}/v2.0", self.config.tenant_id)
+        format!(
+            "https://login.microsoftonline.com/{}/v2.0",
+            self.config.tenant_id
+        )
     }
 
     pub fn frontend_redirect_url(&self) -> &str {
@@ -125,10 +137,18 @@ impl SsoService {
         {
             let mut pending_logins = self.pending_logins.lock().unwrap();
             sweep_expired(&mut pending_logins, PENDING_LOGIN_TTL, |p| p.created_at);
-            pending_logins.insert(state.clone(), PendingLogin { pkce_verifier, nonce: nonce.clone(), created_at: Instant::now() });
+            pending_logins.insert(
+                state.clone(),
+                PendingLogin {
+                    pkce_verifier,
+                    nonce: nonce.clone(),
+                    created_at: Instant::now(),
+                },
+            );
         }
 
-        let mut url = url::Url::parse(&self.authorize_endpoint()).expect("static authorize URL is valid");
+        let mut url =
+            url::Url::parse(&self.authorize_endpoint()).expect("static authorize URL is valid");
         url.query_pairs_mut()
             .append_pair("client_id", &self.config.client_id)
             .append_pair("response_type", "code")
@@ -145,13 +165,17 @@ impl SsoService {
     /// Exchanges the authorization `code` for an ID token, validates it
     /// (signature, issuer, audience, expiry, and that its nonce matches this
     /// `state`'s pending login), and returns the caller's identity.
-    pub async fn complete_login(&self, code: &str, state: &str) -> Result<AuthenticatedIdentity, ApiError> {
+    pub async fn complete_login(
+        &self,
+        code: &str,
+        state: &str,
+    ) -> Result<AuthenticatedIdentity, ApiError> {
         let pending = {
             let mut pending_logins = self.pending_logins.lock().unwrap();
             sweep_expired(&mut pending_logins, PENDING_LOGIN_TTL, |p| p.created_at);
-            pending_logins
-                .remove(state)
-                .ok_or_else(|| ApiError::BadRequest("sign-in session expired or invalid; please try again".into()))?
+            pending_logins.remove(state).ok_or_else(|| {
+                ApiError::BadRequest("sign-in session expired or invalid; please try again".into())
+            })?
         };
 
         let params = [
@@ -163,10 +187,16 @@ impl SsoService {
             ("code_verifier", pending.pkce_verifier.as_str()),
         ];
 
-        let response = self.http.post(self.token_endpoint()).form(&params).send().await.map_err(|e| {
-            tracing::error!(error = %e, "Entra ID token exchange request failed");
-            ApiError::Internal
-        })?;
+        let response = self
+            .http
+            .post(self.token_endpoint())
+            .form(&params)
+            .send()
+            .await
+            .map_err(|e| {
+                tracing::error!(error = %e, "Entra ID token exchange request failed");
+                ApiError::Internal
+            })?;
 
         if !response.status().is_success() {
             let body = response.text().await.unwrap_or_default();
@@ -191,7 +221,11 @@ impl SsoService {
             ApiError::Internal
         })?;
 
-        Ok(AuthenticatedIdentity { external_idp_subject: claims.oid, display_name: claims.name.unwrap_or_else(|| email.clone()), email })
+        Ok(AuthenticatedIdentity {
+            external_idp_subject: claims.oid,
+            display_name: claims.name.unwrap_or_else(|| email.clone()),
+            email,
+        })
     }
 
     async fn validate_id_token(&self, id_token: &str) -> Result<IdTokenClaims, ApiError> {
@@ -212,7 +246,8 @@ impl SsoService {
 
     async fn signing_key(&self, kid: &str) -> Result<DecodingKey, ApiError> {
         if let Some(jwk) = self.cached_jwk(kid) {
-            return DecodingKey::from_rsa_components(&jwk.n, &jwk.e).map_err(|_| ApiError::Internal);
+            return DecodingKey::from_rsa_components(&jwk.n, &jwk.e)
+                .map_err(|_| ApiError::Internal);
         }
         // Not found (or cache stale/empty) -- refresh once in case Entra ID
         // rotated its keys, then give up if it's genuinely not there.
@@ -261,14 +296,23 @@ impl SsoService {
         let code = random_token(32);
         let mut codes = self.handoff_codes.lock().unwrap();
         sweep_expired(&mut codes, HANDOFF_CODE_TTL, |c| c.created_at);
-        codes.insert(code.clone(), HandoffCode { user_id, created_at: Instant::now() });
+        codes.insert(
+            code.clone(),
+            HandoffCode {
+                user_id,
+                created_at: Instant::now(),
+            },
+        );
         code
     }
 
     pub fn redeem_handoff_code(&self, code: &str) -> Result<Uuid, ApiError> {
         let mut codes = self.handoff_codes.lock().unwrap();
         sweep_expired(&mut codes, HANDOFF_CODE_TTL, |c| c.created_at);
-        codes.remove(code).map(|c| c.user_id).ok_or(ApiError::Unauthorized)
+        codes
+            .remove(code)
+            .map(|c| c.user_id)
+            .ok_or(ApiError::Unauthorized)
     }
 }
 

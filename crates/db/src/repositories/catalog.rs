@@ -27,9 +27,10 @@ pub async fn create(
     .execute(pool)
     .await?;
 
-    get_by_id(pool, id)
-        .await?
-        .ok_or_else(|| DbError::NotFound { entity: "service_catalog_item", id: id.to_string() })
+    get_by_id(pool, id).await?.ok_or_else(|| DbError::NotFound {
+        entity: "service_catalog_item",
+        id: id.to_string(),
+    })
 }
 
 pub async fn get_by_id(pool: &Pool, id: Uuid) -> Result<Option<ServiceCatalogItem>, DbError> {
@@ -48,7 +49,9 @@ pub async fn list(pool: &Pool, include_inactive: bool) -> Result<Vec<ServiceCata
     } else {
         format!("{SELECT} WHERE is_active = TRUE ORDER BY category, name")
     };
-    let items = sqlx::query_as::<_, ServiceCatalogItem>(&sql).fetch_all(pool).await?;
+    let items = sqlx::query_as::<_, ServiceCatalogItem>(&sql)
+        .fetch_all(pool)
+        .await?;
     Ok(items)
 }
 

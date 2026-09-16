@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
-use crate::{sql_enum::sql_string_enum, Id, Role, Timestamp};
+use crate::{Id, Role, Timestamp, sql_enum::sql_string_enum};
 
 /// External systems a rendered ticket can be dispatched to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -155,13 +155,30 @@ pub enum ApproverResolution {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum Condition {
-    Equals { field_key: String, value: JsonValue },
-    NotEquals { field_key: String, value: JsonValue },
-    Exists { field_key: String },
-    In { field_key: String, values: Vec<JsonValue> },
-    And { conditions: Vec<Condition> },
-    Or { conditions: Vec<Condition> },
-    Not { condition: Box<Condition> },
+    Equals {
+        field_key: String,
+        value: JsonValue,
+    },
+    NotEquals {
+        field_key: String,
+        value: JsonValue,
+    },
+    Exists {
+        field_key: String,
+    },
+    In {
+        field_key: String,
+        values: Vec<JsonValue>,
+    },
+    And {
+        conditions: Vec<Condition>,
+    },
+    Or {
+        conditions: Vec<Condition>,
+    },
+    Not {
+        condition: Box<Condition>,
+    },
 }
 
 /// Maps a target ticketing system's field name to a Tera template string,

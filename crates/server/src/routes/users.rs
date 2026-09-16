@@ -1,7 +1,7 @@
 use axum::{
+    Json, Router,
     extract::{Path, Query, State},
     routing::{get, patch, post},
-    Json, Router,
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -10,7 +10,7 @@ use servcat_model::{NewAuditLogEntry, NewUser, Role, UpdateUser, UserProfile};
 use uuid::Uuid;
 
 use crate::{
-    auth::{hash_password, AuthUser},
+    auth::{AuthUser, hash_password},
     error::ApiError,
     state::AppState,
 };
@@ -51,9 +51,15 @@ async fn create_user(
     auth_user.require_role(&[Role::Admin])?;
 
     if new_user.password.is_none() && new_user.external_idp_subject.is_none() {
-        return Err(ApiError::BadRequest("a new user needs either a password or an external_idp_subject".into()));
+        return Err(ApiError::BadRequest(
+            "a new user needs either a password or an external_idp_subject".into(),
+        ));
     }
-    let password_hash = new_user.password.as_deref().map(hash_password).transpose()?;
+    let password_hash = new_user
+        .password
+        .as_deref()
+        .map(hash_password)
+        .transpose()?;
 
     let created = users::create(&state.pool, &new_user, password_hash.as_deref()).await?;
 
@@ -106,7 +112,9 @@ async fn deactivate_user(
 ) -> Result<(), ApiError> {
     auth_user.require_role(&[Role::Admin])?;
     if auth_user.0.id == id {
-        return Err(ApiError::BadRequest("you cannot deactivate your own account".into()));
+        return Err(ApiError::BadRequest(
+            "you cannot deactivate your own account".into(),
+        ));
     }
 
     users::deactivate(&state.pool, id).await?;

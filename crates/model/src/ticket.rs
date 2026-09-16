@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
-use crate::{sql_enum::sql_string_enum, Id, TargetSystem, Timestamp};
+use crate::{Id, TargetSystem, Timestamp, sql_enum::sql_string_enum};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

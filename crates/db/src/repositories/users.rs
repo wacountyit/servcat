@@ -9,7 +9,11 @@ const SELECT: &str = "SELECT id, email, display_name, password_hash, external_id
 /// Inserts a new user. `password_hash` must already be an Argon2id hash
 /// (or `None` for an SSO-only account) -- this layer never sees, hashes, or
 /// logs a plaintext password.
-pub async fn create(pool: &Pool, new: &NewUser, password_hash: Option<&str>) -> Result<User, DbError> {
+pub async fn create(
+    pool: &Pool,
+    new: &NewUser,
+    password_hash: Option<&str>,
+) -> Result<User, DbError> {
     let id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO users (id, email, display_name, password_hash, external_idp_subject, \
@@ -26,9 +30,10 @@ pub async fn create(pool: &Pool, new: &NewUser, password_hash: Option<&str>) -> 
     .execute(pool)
     .await?;
 
-    get_by_id(pool, id)
-        .await?
-        .ok_or_else(|| DbError::NotFound { entity: "user", id: id.to_string() })
+    get_by_id(pool, id).await?.ok_or_else(|| DbError::NotFound {
+        entity: "user",
+        id: id.to_string(),
+    })
 }
 
 pub async fn get_by_id(pool: &Pool, id: Uuid) -> Result<Option<User>, DbError> {
@@ -47,7 +52,10 @@ pub async fn get_by_email(pool: &Pool, email: &str) -> Result<Option<User>, DbEr
     Ok(user)
 }
 
-pub async fn get_by_external_idp_subject(pool: &Pool, subject: &str) -> Result<Option<User>, DbError> {
+pub async fn get_by_external_idp_subject(
+    pool: &Pool,
+    subject: &str,
+) -> Result<Option<User>, DbError> {
     let user = sqlx::query_as::<_, User>(&format!("{SELECT} WHERE external_idp_subject = ?"))
         .bind(subject)
         .fetch_optional(pool)
@@ -111,7 +119,11 @@ pub async fn update(pool: &Pool, id: Uuid, patch: &UpdateUser) -> Result<Option<
 /// just an email, ahead of that person's first SSO login) to the IdP
 /// subject asserted on that first login. Only called when the target row's
 /// `external_idp_subject` is currently `NULL` -- see `routes/sso.rs`.
-pub async fn link_external_idp_subject(pool: &Pool, id: Uuid, subject: &str) -> Result<Option<User>, DbError> {
+pub async fn link_external_idp_subject(
+    pool: &Pool,
+    id: Uuid,
+    subject: &str,
+) -> Result<Option<User>, DbError> {
     sqlx::query("UPDATE users SET external_idp_subject = ? WHERE id = ?")
         .bind(subject)
         .bind(id)
