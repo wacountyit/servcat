@@ -8,6 +8,7 @@ mod routes;
 mod sso;
 mod state;
 mod uploads;
+mod web;
 
 use std::{sync::Arc, time::Duration};
 

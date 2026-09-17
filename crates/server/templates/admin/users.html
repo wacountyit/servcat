@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Users - {{ layout.app_name }}{% endblock %}
+{% block content %}
+<h1>Users</h1>
+{% include "admin/_subnav.html" %}
+
+<table>
+  <thead>
+    <tr><th>Name</th><th>Email</th><th>Role</th><th>Department</th><th>Status</th><th></th></tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+    <tr>
+      <td>{{ u.display_name }}</td>
+      <td>{{ u.email }}</td>
+      <td colspan="2">
+        <form method="post" action="/admin/users/{{ u.id }}/update" class="row-form">
+          <select name="role">
+            <option value="requester" {% if u.role == Role::Requester %}selected{% endif %}>requester</option>
+            <option value="approver" {% if u.role == Role::Approver %}selected{% endif %}>approver</option>
+            <option value="agent" {% if u.role == Role::Agent %}selected{% endif %}>agent</option>
+            <option value="admin" {% if u.role == Role::Admin %}selected{% endif %}>admin</option>
+          </select>
+          <select name="department_id">
+            <option value="">(none)</option>
+            {% for d in departments %}
+            <option value="{{ d.id }}" {% if u.department_id.is_some() && u.department_id.unwrap() == d.id %}selected{% endif %}>{{ d.name }}</option>
+            {% endfor %}
+          </select>
+          <input type="hidden" name="is_active" value="{{ u.is_active }}">
+          <button type="submit" class="secondary">Save</button>
+        </form>
+      </td>
+      <td>{% if u.is_active %}Active{% else %}Deactivated{% endif %}</td>
+      <td>
+        {% if u.is_active && u.id != current_user_id %}
+        <form method="post" action="/admin/users/{{ u.id }}/deactivate" class="inline-form">
+          <button type="submit" class="danger">Deactivate</button>
+        </form>
+        {% else if !u.is_active %}
+        <form method="post" action="/admin/users/{{ u.id }}/update" class="inline-form">
+          <input type="hidden" name="role" value="{{ u.role.as_str() }}">
+          {% if let Some(dept_id) = u.department_id %}<input type="hidden" name="department_id" value="{{ dept_id }}">{% endif %}
+          <input type="hidden" name="is_active" value="true">
+          <button type="submit" class="secondary">Reactivate</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Add a user</h2>
+<div class="card">
+  <form method="post" action="/admin/users" class="stacked-form">
+    <label>Email <input type="email" name="email" required></label>
+    <label>Display name <input type="text" name="display_name" required></label>
+    <label>Temporary password <input type="password" name="password" required minlength="12"></label>
+    <label>
+      Role
+      <select name="role">
+        <option value="requester">requester</option>
+        <option value="approver">approver</option>
+        <option value="agent">agent</option>
+        <option value="admin">admin</option>
+      </select>
+    </label>
+    <button type="submit" class="primary">Create user</button>
+  </form>
+</div>
+{% endblock %}

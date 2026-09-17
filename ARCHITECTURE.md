@@ -62,12 +62,16 @@ crates/
   `ManagerOfRequester`, `RoleInDepartment`) to a concrete user id, creates
   the `PendingApproval` row, fires a (currently log-only) notification, and
   polls for expired approvals on a timer (`spawn_expiry_poller`).
-- **`server`**: the Axum application. `routes/` holds one module per
-  resource; `auth.rs` and `sso.rs` (top-level, not under `routes/`) hold
-  the actual token/session/SSO logic that the `routes/auth.rs` and
-  `routes/sso.rs` handlers call into; `orchestrator.rs` is the one place
-  that wires the workflow engine's pure `Outcome` to real database writes,
-  approver resolution, and connector dispatch.
+- **`server`**: the Axum application. `routes/` holds the JSON API, one
+  module per resource, nested under `/api` in `routes::build_router`;
+  `auth.rs` and `sso.rs` (top-level, not under `routes/`) hold the actual
+  token/session/SSO logic that both `routes/*` and `web/*` handlers call
+  into; `orchestrator.rs` is the one place that wires the workflow engine's
+  pure `Outcome` to real database writes, approver resolution, and connector
+  dispatch. `web/` is the server-rendered web UI (Askama templates under
+  `templates/`) mounted at the site root alongside `/api` -- see
+  "Frontend" in README.md for the page list and `web/session.rs` for how it
+  turns the JSON API's bearer-JWT auth into a browser session cookie.
 
 ## Data model
 
@@ -89,9 +93,9 @@ string, to keep indexes small.
 
 ## Request lifecycle: submitting a service request
 
-1. `POST /instances` starts a `WorkflowInstance` against a published
+1. `POST /api/instances` starts a `WorkflowInstance` against a published
    `WorkflowDefinition`, at that definition's entry step.
-2. `POST /instances/{id}/answers` hands one answer to
+2. `POST /api/instances/{id}/answers` hands one answer to
    `workflow-engine::advance`, which validates it against the current
    step and returns the next `Outcome`.
 3. `server::orchestrator` acts on that `Outcome`:
@@ -104,7 +108,7 @@ string, to keep indexes small.
      matching `TicketConnector`, writing the result to `tickets`.
    - `Finished`: marks the instance `completed`/`rejected`/`cancelled` and
      sets `completed_at`.
-4. An approval decision (`POST /approvals/{id}/decide`) or an expired
+4. An approval decision (`POST /api/approvals/{id}/decide`) or an expired
    approval (the background poller in `approvals::spawn_expiry_poller`)
    re-enters the same `workflow-engine::advance` path with a synthetic
    answer, so approval handling and question-answering share one code path
@@ -117,16 +121,16 @@ short-lived JWT access token and an opaque, single-use refresh token
 (stored only as a SHA-256 hash in `sessions`).
 
 ```
-Local:  POST /auth/login  -------------------------------> token pair
+Local:  POST /api/auth/login  ---------------------------> token pair
 
-SSO:    GET /auth/sso/login
+SSO:    GET /api/auth/sso/login
           -> redirect to Entra ID (PKCE + nonce recorded in-memory)
-        GET /auth/sso/callback  (Entra ID redirects back with ?code&state)
+        GET /api/auth/sso/callback  (Entra ID redirects back with ?code&state)
           -> exchange code for an ID token, validate it (JWKS signature,
              issuer, audience, nonce)
           -> match/create the local User row
           -> redirect to SSO_FRONTEND_REDIRECT_URL?code=<one-time code>
-        POST /auth/sso/token  { code }  -------------------> token pair
+        POST /api/auth/sso/token  { code }  ---------------> token pair
 ```
 
 `crates/server/src/sso.rs` implements the OAuth2 authorization-code + PKCE

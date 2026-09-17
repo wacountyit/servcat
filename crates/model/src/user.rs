@@ -22,6 +22,19 @@ sql_string_enum!(Role {
     Admin => "admin",
 });
 
+impl Role {
+    /// Human-readable label for UI surfaces (the web UI's nav/user badges,
+    /// admin user list, etc.).
+    pub fn label(&self) -> &'static str {
+        match self {
+            Role::Requester => "Requester",
+            Role::Approver => "Approver",
+            Role::Agent => "Agent",
+            Role::Admin => "Admin",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct User {
     pub id: Id,

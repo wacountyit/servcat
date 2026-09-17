@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - {{ layout.app_name }}{% endblock %}
+{% block content %}
+<h1>Welcome, {{ layout.user_display_name }}</h1>
+
+<div class="card-grid">
+  <div class="card">
+    <h2 style="margin-top:0">Browse the catalog</h2>
+    <p>Start a new request from the service catalog.</p>
+    <a class="primary" href="/catalog">Open catalog</a>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">My requests</h2>
+    <p>{{ open_request_count }} open request{% if open_request_count != 1 %}s{% endif %}.</p>
+    <a class="button-secondary" href="/requests">View my requests</a>
+  </div>
+  <div class="card">
+    <h2 style="margin-top:0">Approvals</h2>
+    <p>{{ pending_approval_count }} awaiting your decision.</p>
+    <a class="button-secondary" href="/approvals">View approvals</a>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Settings - {{ layout.app_name }}{% endblock %}
+{% block content %}
+<h1>Organization settings</h1>
+{% include "admin/_subnav.html" %}
+
+<div class="card">
+  <form method="post" action="/admin/settings" class="stacked-form">
+    <label>
+      Organization name
+      <input type="text" name="app_name" value="{{ app_name }}" required>
+    </label>
+    <label style="flex-direction: row; align-items: center; gap: 8px;">
+      <input type="checkbox" name="allow_local_signup" value="true" {% if allow_local_signup %}checked{% endif %} style="width:auto;">
+      Allow local email/password self-registration
+    </label>
+    <p class="hint">
+      Single sign-on is
+      {% if sso_enabled %}configured (Microsoft Entra ID).{% else %}not configured -- set the AZURE_* environment variables to enable it.{% endif %}
+    </p>
+    <button type="submit" class="primary">Save</button>
+  </form>
+</div>
+{% endblock %}

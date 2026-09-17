@@ -23,6 +23,21 @@ sql_string_enum!(InstanceStatus {
     Failed => "failed",
 });
 
+impl InstanceStatus {
+    /// Human-readable label for UI surfaces (the web UI's request list/detail
+    /// pages).
+    pub fn label(&self) -> &'static str {
+        match self {
+            InstanceStatus::InProgress => "In progress",
+            InstanceStatus::AwaitingApproval => "Awaiting approval",
+            InstanceStatus::Completed => "Completed",
+            InstanceStatus::Rejected => "Rejected",
+            InstanceStatus::Cancelled => "Cancelled",
+            InstanceStatus::Failed => "Failed",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
 pub struct WorkflowInstance {
     pub id: Id,

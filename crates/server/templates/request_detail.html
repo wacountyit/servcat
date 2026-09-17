@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Request - {{ layout.app_name }}{% endblock %}
+{% block content %}
+<h1>{{ catalog_item_name }}</h1>
+<p><span class="badge badge-{{ instance.status.as_str() }}">{{ instance.status.label() }}</span></p>
+
+{% if let Some(q) = question %}
+<div class="card">
+  <form method="post" action="/requests/{{ instance.id }}/answer" class="stacked-form">
+    <input type="hidden" name="field_key" value="{{ q.field_key }}">
+    <label>
+      {{ q.label }}
+      {% match q.input_type %}
+        {% when InputType::Text %}
+          <input type="text" name="value" {% if q.required %}required{% endif %}>
+        {% when InputType::TextArea %}
+          <textarea name="value" rows="4" {% if q.required %}required{% endif %}></textarea>
+        {% when InputType::Number %}
+          <input type="number" step="any" name="value" {% if q.required %}required{% endif %}>
+        {% when InputType::Date %}
+          <input type="date" name="value" {% if q.required %}required{% endif %}>
+        {% when InputType::Boolean %}
+          <select name="value" {% if q.required %}required{% endif %}>
+            <option value="">-- choose --</option>
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+        {% when InputType::Select %}
+          <select name="value" {% if q.required %}required{% endif %}>
+            <option value="">-- choose --</option>
+            {% for opt in q.options %}
+            <option value="{{ opt.value }}">{{ opt.label }}</option>
+            {% endfor %}
+          </select>
+        {% when InputType::MultiSelect %}
+          <input type="text" name="value" placeholder="comma-separated values">
+      {% endmatch %}
+    </label>
+    <button type="submit" class="primary">Submit</button>
+  </form>
+</div>
+{% else if instance.status.as_str() == "awaiting_approval" %}
+<p class="card">This request is waiting on an approver's decision.</p>
+{% endif %}
+
+{% if !answers.is_empty() %}
+<h2>Submitted answers</h2>
+<table>
+  <tbody>
+    {% for (key, value) in answers %}
+    <tr><th>{{ key }}</th><td>{{ value }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+<p class="hint"><a href="/requests">&larr; Back to my requests</a></p>
+{% endblock %}

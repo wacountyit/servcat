@@ -144,21 +144,20 @@ EOF
         fi
 fi
 
-# --- Frontend / CORS ---
-# The React/Tauri frontend is a separate app that calls this API; without
-# its origin allow-listed here, the browser will block every request.
+# --- CORS ---
+# The bundled web UI is served by this same app and never makes a
+# cross-origin request, so it needs no entry here at all. This only matters
+# if something else -- a separate JS app, a mobile client, a script -- calls
+# the JSON API directly from a browser at a different origin.
 if grep -q "^CORS_ALLOWED_ORIGINS=" .env 2>/dev/null; then
         echo "CORS origins already recorded in .env -- skipping prompt."
 else
         echo ""
-        echo "Where will the ServCat frontend be served from? This is whatever origin"
-        echo "the browser loads the web app from -- it can be the same domain as above"
-        echo "(most common if the frontend is served by the same reverse proxy), a"
-        echo "different subdomain, or left blank for local development only. This"
-        echo "only matters for browser requests -- it's fine to leave the default if"
-        echo "you're just testing the API directly (curl, Postman, etc.)."
-        read -rp "Frontend origin(s), comma-separated [default: ${public_base_url:-http://localhost:5173}]: " cors_origins
-        cors_origins=${cors_origins:-${public_base_url:-http://localhost:5173}}
+        echo "Will anything besides the built-in web UI call the JSON API directly"
+        echo "from a browser at a different origin (a separate JS app, etc.)? If so,"
+        echo "list its origin(s) here, comma-separated. Leave blank if not -- this is"
+        echo "the right default for most installs."
+        read -rp "Extra CORS origin(s), comma-separated [default: none]: " cors_origins
         echo "CORS_ALLOWED_ORIGINS=${cors_origins}" >> .env
 fi
 
@@ -190,8 +189,9 @@ if grep -q "^ALLOW_LOCAL_SIGNUP=" .env 2>/dev/null; then
 else
         echo ""
         echo "By default, only the bootstrap admin and SSO sign-ins can create"
-        echo "accounts -- local email/password self-registration stays disabled and"
-        echo "hidden in the frontend. Most orgs on SSO should leave this off."
+        echo "accounts -- local email/password self-registration stays disabled"
+        echo "(the web UI doesn't expose a sign-up page either way). Most orgs on"
+        echo "SSO should leave this off."
         read -rp "Allow local email/password self-registration too? [y/N]: " allow_signup
         if [[ "$allow_signup" =~ ^[Yy]$ ]]; then
                 echo "ALLOW_LOCAL_SIGNUP=true" >> .env
@@ -221,10 +221,9 @@ else
                 read -rp "Application (client) ID: " azure_client_id
                 read -rsp "Client secret (*Value* -- input hidden): " azure_client_secret
                 echo ""
-                read -rp "Redirect URI [default: ${public_base_url:-https://<this-host>}/auth/sso/callback]: " azure_redirect_uri
-                azure_redirect_uri=${azure_redirect_uri:-${public_base_url:-https://<this-host>}/auth/sso/callback}
-                read -rp "Frontend URL to send users back to after sign-in [default: ${cors_origins:-${public_base_url}}/auth/sso/complete]: " sso_frontend_redirect_url
-                sso_frontend_redirect_url=${sso_frontend_redirect_url:-${cors_origins:-${public_base_url}}/auth/sso/complete}
+                read -rp "Redirect URI [default: ${public_base_url:-https://<this-host>}/api/auth/sso/callback]: " azure_redirect_uri
+                azure_redirect_uri=${azure_redirect_uri:-${public_base_url:-https://<this-host>}/api/auth/sso/callback}
+                sso_frontend_redirect_url=${public_base_url:-https://<this-host>}/login/sso/complete
 
                 cat >> .env << EOF
 AZURE_TENANT_ID=${azure_tenant_id}
@@ -264,8 +263,7 @@ else
         echo "your reverse proxy's HTTPS URL."
 fi
 echo ""
-echo "This repo is the API only -- point your reverse proxy's frontend origin"
-echo "at wherever the ServCat web app is deployed, and confirm it matches"
-echo "CORS_ALLOWED_ORIGINS in .env."
+echo "Sign in at the URL above with the bootstrap admin account -- the web UI"
+echo "is served by this same app, no separate frontend deployment needed."
 echo ""
 echo "Installation complete."

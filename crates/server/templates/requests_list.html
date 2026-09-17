@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}My Requests - {{ layout.app_name }}{% endblock %}
+{% block content %}
+<h1>My requests</h1>
+
+{% if requests.is_empty() %}
+<p class="empty-state">You haven't submitted any requests yet. <a href="/catalog">Browse the catalog</a>.</p>
+{% else %}
+<table>
+  <thead><tr><th>Submitted</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+    {% for r in requests %}
+    <tr>
+      <td>{{ r.created_at.format("%Y-%m-%d %H:%M") }}</td>
+      <td><span class="badge badge-{{ r.status.as_str() }}">{{ r.status.label() }}</span></td>
+      <td><a href="/requests/{{ r.id }}">View &rarr;</a></td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

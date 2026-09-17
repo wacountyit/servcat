@@ -32,6 +32,31 @@ pub async fn issue_token_pair(state: &AppState, user: &User) -> Result<(String, 
     Ok((access_token, refresh_token))
 }
 
+/// Local email/password authentication, shared by the JSON API's
+/// `POST /auth/login` and the web UI's `POST /login`. Returns the same
+/// generic `Unauthorized` whether the email doesn't exist, has no local
+/// password (SSO-only), is deactivated, or the password is wrong -- avoids
+/// confirming to a caller which emails have accounts.
+pub async fn authenticate_local(
+    pool: &Pool,
+    email: &str,
+    password: &str,
+) -> Result<User, ApiError> {
+    let user = users::get_by_email(pool, email)
+        .await?
+        .ok_or(ApiError::Unauthorized)?;
+    if !user.is_active {
+        return Err(ApiError::Unauthorized);
+    }
+    let Some(password_hash) = &user.password_hash else {
+        return Err(ApiError::Unauthorized);
+    };
+    if !verify_password(password, password_hash)? {
+        return Err(ApiError::Unauthorized);
+    }
+    Ok(user)
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
     sub: Uuid,
@@ -74,7 +99,7 @@ pub fn issue_access_token(
     .map_err(|_| ApiError::Internal)
 }
 
-fn verify_access_token(
+pub(crate) fn verify_access_token(
     config: &crate::config::AppConfig,
     token: &str,
 ) -> Result<(Uuid, Role), ApiError> {

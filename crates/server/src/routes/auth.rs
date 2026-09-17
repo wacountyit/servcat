@@ -27,22 +27,7 @@ async fn login(
     State(state): State<AppState>,
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<TokenResponse>, ApiError> {
-    // Same generic error whether the email doesn't exist, has no local
-    // password (SSO-only), is deactivated, or the password is wrong -- avoids
-    // confirming to a caller which emails have accounts.
-    let user = users::get_by_email(&state.pool, &req.email)
-        .await?
-        .ok_or(ApiError::Unauthorized)?;
-    if !user.is_active {
-        return Err(ApiError::Unauthorized);
-    }
-    let Some(password_hash) = &user.password_hash else {
-        return Err(ApiError::Unauthorized);
-    };
-    if !auth::verify_password(&req.password, password_hash)? {
-        return Err(ApiError::Unauthorized);
-    }
-
+    let user = auth::authenticate_local(&state.pool, &req.email, &req.password).await?;
     let (access_token, refresh_token) = auth::issue_token_pair(&state, &user).await?;
     Ok(Json(TokenResponse {
         access_token,

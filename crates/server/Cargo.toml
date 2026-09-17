@@ -16,7 +16,8 @@ servcat-workflow-engine.workspace = true
 servcat-approvals.workspace = true
 
 axum.workspace = true
-axum-extra = { version = "0.10", features = ["typed-header"] }
+axum-extra = { version = "0.10", features = ["typed-header", "cookie"] }
+askama = "0.12"
 tokio = { workspace = true, features = ["time", "net", "fs"] }
 tower.workspace = true
 tower-http.workspace = true
@@ -39,3 +40,4 @@ sha2 = "0.10"
 hex = "0.4"
 sqlx.workspace = true
 async-trait.workspace = true
+time = "0.3"

@@ -6,10 +6,11 @@ lightweight, org-customizable, and designed to front an existing ticketing
 system (Jira, GLPI, Freshservice, or a generic webhook) rather than reinvent
 one.
 
-This repo is the Rust backend: a workflow interpreter, a MariaDB-backed
-domain model, and an Axum API. A TypeScript/React frontend (web + Tauri
-desktop, one codebase) consumes this API, planned as a separate repo; see
-"Frontend" below for why.
+This repo is the Rust backend and its web UI: a workflow interpreter, a
+MariaDB-backed domain model, an Axum JSON API, and a server-rendered (Askama)
+web frontend for requesters, approvers, and admins, all in one binary. See
+"Frontend" below for how the web UI is built and how a Tauri desktop shell
+fits in.
 
 More docs:
 
@@ -91,62 +92,67 @@ dispatch with a logged configuration error rather than panicking.
 
 ## API reference
 
-All routes are relative to `SERVER_BIND_ADDR` (Docker: the host port from
-`.env`'s `APP_PORT`). Auth-protected routes take a `Bearer` access token;
-admin-only routes additionally require `role = admin`.
+The JSON API lives under `/api`, relative to `SERVER_BIND_ADDR` (Docker: the
+host port from `.env`'s `APP_PORT`) -- `/health` and `/uploads/{*path}` are
+the only exceptions, kept unprefixed for the Docker healthcheck and simple
+asset URLs. Auth-protected routes take a `Bearer` access token; admin-only
+routes additionally require `role = admin`. The web UI (see "Frontend"
+below) is a separate set of page routes at the site root that authenticate
+via a session cookie instead, and isn't listed here.
 
 | Method | Path | Auth | Purpose |
 | --- | --- | --- | --- |
 | GET | `/health` | none | liveness check |
-| GET | `/config` | none | org name, seal, `allow_local_signup`, `sso_enabled` |
+| GET | `/api/config` | none | org name, seal, `allow_local_signup`, `sso_enabled` |
 | GET | `/uploads/{*path}` | none | serves uploaded org/department seals |
-| POST | `/auth/login` | none | local email/password login |
-| POST | `/auth/register` | none | local self-registration, 403 unless `allow_local_signup` |
-| POST | `/auth/refresh` | none | rotate a refresh token for a new access/refresh pair |
-| POST | `/auth/logout` | none | revoke a refresh token |
-| GET | `/auth/sso/login` | none | redirects to Microsoft Entra ID |
-| GET | `/auth/sso/callback` | none | Entra ID's redirect target; provisions/links the user |
-| POST | `/auth/sso/token` | none | exchanges a one-time handoff code for a token pair |
-| GET | `/users/me` | user | current user's profile |
-| GET | `/users` | admin | list users |
-| POST | `/users` | admin | create a user (local or pre-provisioned for SSO) |
-| PATCH | `/users/{id}` | admin | update a user |
-| POST | `/users/{id}/deactivate` | admin | deactivate a user and revoke their sessions |
-| GET | `/departments` | user | list departments |
-| POST | `/departments` | admin | create a department |
-| PATCH | `/departments/{id}` | admin | update a department |
-| DELETE | `/departments/{id}` | admin | delete a department |
-| POST | `/departments/{id}/logo` | admin | upload a department seal (raw image bytes) |
-| DELETE | `/departments/{id}/logo` | admin | remove a department seal |
-| PATCH | `/admin/settings` | admin | update org name / `allow_local_signup` |
-| POST | `/admin/settings/logo` | admin | upload the org-wide seal |
-| DELETE | `/admin/settings/logo` | admin | remove the org-wide seal |
-| GET/POST | `/catalog` | user/admin | list or create catalog items |
-| PATCH | `/catalog/{id}` | admin | update a catalog item |
-| POST | `/catalog/{id}/deactivate` | admin | deactivate a catalog item |
-| GET/POST | `/workflow-definitions` | admin | list or create workflow definitions |
-| POST | `/workflow-definitions/{id}/publish` | admin | publish a definition |
-| POST | `/workflow-definitions/{id}/unpublish` | admin | unpublish a definition |
-| GET/POST | `/instances` | user | list your instances, or start a new one |
-| GET | `/instances/{id}` | user | fetch one instance (requester/approver/agent/admin only) |
-| POST | `/instances/{id}/answers` | user | submit an answer, advancing the workflow |
-| GET | `/approvals` | user | pending approvals assigned to you |
-| POST | `/approvals/{id}/decide` | user | approve or reject |
+| POST | `/api/auth/login` | none | local email/password login |
+| POST | `/api/auth/register` | none | local self-registration, 403 unless `allow_local_signup` |
+| POST | `/api/auth/refresh` | none | rotate a refresh token for a new access/refresh pair |
+| POST | `/api/auth/logout` | none | revoke a refresh token |
+| GET | `/api/auth/sso/login` | none | redirects to Microsoft Entra ID |
+| GET | `/api/auth/sso/callback` | none | Entra ID's redirect target; provisions/links the user |
+| POST | `/api/auth/sso/token` | none | exchanges a one-time handoff code for a token pair |
+| GET | `/api/users/me` | user | current user's profile |
+| GET | `/api/users` | admin | list users |
+| POST | `/api/users` | admin | create a user (local or pre-provisioned for SSO) |
+| PATCH | `/api/users/{id}` | admin | update a user |
+| POST | `/api/users/{id}/deactivate` | admin | deactivate a user and revoke their sessions |
+| GET | `/api/departments` | user | list departments |
+| POST | `/api/departments` | admin | create a department |
+| PATCH | `/api/departments/{id}` | admin | update a department |
+| DELETE | `/api/departments/{id}` | admin | delete a department |
+| POST | `/api/departments/{id}/logo` | admin | upload a department seal (raw image bytes) |
+| DELETE | `/api/departments/{id}/logo` | admin | remove a department seal |
+| PATCH | `/api/admin/settings` | admin | update org name / `allow_local_signup` |
+| POST | `/api/admin/settings/logo` | admin | upload the org-wide seal |
+| DELETE | `/api/admin/settings/logo` | admin | remove the org-wide seal |
+| GET/POST | `/api/catalog` | user/admin | list or create catalog items |
+| PATCH | `/api/catalog/{id}` | admin | update a catalog item |
+| POST | `/api/catalog/{id}/deactivate` | admin | deactivate a catalog item |
+| GET/POST | `/api/workflow-definitions` | admin | list or create workflow definitions |
+| POST | `/api/workflow-definitions/{id}/publish` | admin | publish a definition |
+| POST | `/api/workflow-definitions/{id}/unpublish` | admin | unpublish a definition |
+| GET/POST | `/api/instances` | user | list your instances, or start a new one |
+| GET | `/api/instances/{id}` | user | fetch one instance (requester/approver/agent/admin only) |
+| POST | `/api/instances/{id}/answers` | user | submit an answer, advancing the workflow |
+| GET | `/api/approvals` | user | pending approvals assigned to you |
+| POST | `/api/approvals/{id}/decide` | user | approve or reject |
 
 ## Authentication
 
 Two ways in, both ending in the same access/refresh JWT pair:
 
-- **Local email/password** (`POST /auth/login`): always available for the
-  bootstrap admin. Self-registration (`POST /auth/register`) is gated by
-  `org_settings.allow_local_signup`, which defaults to `false` and is meant
-  to stay off (and hidden in the frontend) for orgs relying on SSO;
-  `GET /config` exposes the current value so the frontend knows whether to
-  show a sign-up option at all.
-- **Microsoft Entra ID (Azure AD) SSO** (`GET /auth/sso/login` ->
-  `/auth/sso/callback` -> `POST /auth/sso/token`): this server is the
-  confidential OAuth client (holds the client secret) and validates the ID
-  token itself (signature via Entra ID's JWKS, issuer, audience, nonce)
+- **Local email/password** (`POST /api/auth/login`): always available for
+  the bootstrap admin. Self-registration (`POST /api/auth/register`) is
+  gated by `org_settings.allow_local_signup`, which defaults to `false` and
+  is meant to stay off for orgs relying on SSO; `GET /api/config` exposes
+  the current value. The web UI itself doesn't expose a self-registration
+  page today (admins create accounts from `/admin/users` instead) -- this
+  flag mainly matters if something else calls the JSON API directly.
+- **Microsoft Entra ID (Azure AD) SSO** (`GET /api/auth/sso/login` ->
+  `/api/auth/sso/callback` -> `POST /api/auth/sso/token`): this server is
+  the confidential OAuth client (holds the client secret) and validates the
+  ID token itself (signature via Entra ID's JWKS, issuer, audience, nonce)
   before provisioning a local user. See `crates/server/src/sso.rs` for the
   full flow, and `AppConfig::from_env` for the five `AZURE_*`/
   `SSO_FRONTEND_REDIRECT_URL` vars that enable it.
@@ -160,11 +166,11 @@ Two ways in, both ending in the same access/refresh JWT pair:
   different trust boundary than the local self-registration path.
 
   The callback redirects the browser to `SSO_FRONTEND_REDIRECT_URL` with a
-  short-lived, single-use `?code=...`, which the frontend immediately
-  exchanges via `POST /auth/sso/token` for a token pair. This keeps both
-  Entra ID's tokens and ours out of the browser's address bar/history, and
-  the exchange step is identical for the web app and a Tauri custom-scheme
-  redirect.
+  short-lived, single-use `?code=...`. For the built-in web UI, point that
+  var at this server's own `/login/sso/complete`, which redeems the code and
+  sets the same session cookie a local login would (see "Frontend" below);
+  `POST /api/auth/sso/token` is what a separate JS/Tauri client would call
+  instead if one is ever built against the JSON API directly.
 
 ## Organization branding
 
@@ -227,14 +233,39 @@ hardening checklist. Highlights:
 
 ## Frontend
 
-The frontend (not in this repo) is planned as TypeScript/React rather than
-Leptos: this app is fundamentally a dynamic, conditionally-branching form
-renderer today and a visual workflow graph builder for admins tomorrow, and
-that's exactly where the JS ecosystem (JSON-Schema-driven forms,
-react-hook-form, React Flow for the graph editor) is more mature than Rust's.
-Tauri just points its webview at the built static assets, so the same
-frontend ships as both a web app and a desktop app without giving up
-"Rust for everything that matters" in this backend.
+The web UI is server-rendered with [Askama](https://docs.rs/askama)
+(compile-time-checked HTML templates, `crates/server/templates/`) and lives
+in `crates/server/src/web/`, mounted at the site root alongside the JSON API
+(nested under `/api`, see "API reference" above). It authenticates browsers
+via an httponly session cookie bridged to the same JWT/refresh-token
+machinery the JSON API uses (`crates/server/src/web/session.rs`) rather than
+a bearer header, so there's no separate frontend deployment, build step, or
+Node toolchain -- `cargo build` produces one binary that serves both.
+
+Pages, by role:
+
+- **Everyone**: `/` dashboard, `/catalog` (browse + start a request),
+  `/requests` and `/requests/{id}` (the request wizard -- each
+  `WorkflowDefinition::Question` step renders as one form, submitted one
+  answer at a time, matching how `workflow-engine` actually advances an
+  instance), `/approvals` (decide anything resolved to you, regardless of
+  role -- same as the JSON API).
+- **Admin** (`/admin/users`, `/admin/departments`, `/admin/catalog`,
+  `/admin/workflows`, `/admin/settings`): user/department/catalog management,
+  org branding/signup toggle, and workflow definitions. Authoring a
+  `WorkflowGraph` is still done as JSON in a textarea today -- there's no
+  drag-and-drop graph builder yet.
+
+Since AD-group-to-role mapping isn't implemented, a user's `role` (and
+therefore which admin pages they can reach) is a plain column set by another
+admin or, for a first SSO login, `Requester` by default; nothing here reads
+Entra ID group claims yet.
+
+Tauri packaging is still on the table for a native desktop shell: since this
+is an ordinary server-rendered site (no SPA routing tricks, no client-side
+state that assumes a `file://` origin), a Tauri shell can simply point its
+webview at this server's URL the same way a browser would, rather than
+bundling built JS assets the way an SPA-based Tauri app would.
 
 ## Contributing
 

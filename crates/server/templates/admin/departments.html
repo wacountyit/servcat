@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Departments - {{ layout.app_name }}{% endblock %}
+{% block content %}
+<h1>Departments</h1>
+{% include "admin/_subnav.html" %}
+
+<table>
+  <thead><tr><th>Name</th><th>Parent</th><th></th></tr></thead>
+  <tbody>
+    {% for d in departments %}
+    <tr>
+      <td colspan="2">
+        <form method="post" action="/admin/departments/{{ d.id }}/update" class="row-form">
+          <input type="text" name="name" value="{{ d.name }}" required>
+          <select name="parent_department_id">
+            <option value="">(none)</option>
+            {% for p in departments %}
+            {% if p.id != d.id %}
+            <option value="{{ p.id }}" {% if d.parent_department_id|is_selected_parent(p.id) %}selected{% endif %}>{{ p.name }}</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+          <button type="submit" class="secondary">Save</button>
+        </form>
+      </td>
+      <td>
+        <form method="post" action="/admin/departments/{{ d.id }}/delete" class="inline-form">
+          <button type="submit" class="danger">Delete</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Add a department</h2>
+<div class="card">
+  <form method="post" action="/admin/departments" class="stacked-form">
+    <label>Name <input type="text" name="name" required></label>
+    <label>
+      Parent department
+      <select name="parent_department_id">
+        <option value="">(none)</option>
+        {% for d in departments %}
+        <option value="{{ d.id }}">{{ d.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="primary">Create department</button>
+  </form>
+</div>
+{% endblock %}

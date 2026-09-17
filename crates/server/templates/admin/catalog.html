@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Catalog - {{ layout.app_name }}{% endblock %}
+{% block content %}
+<h1>Manage catalog</h1>
+{% include "admin/_subnav.html" %}
+
+<table>
+  <thead><tr><th>Name</th><th>Category</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+    {% for item in items %}
+    <tr>
+      <td>{{ item.name }}</td>
+      <td>{% if let Some(category) = item.category %}{{ category }}{% endif %}</td>
+      <td>{% if item.is_active %}Active{% else %}Inactive{% endif %}</td>
+      <td>
+        <form method="post" action="/admin/catalog/{{ item.id }}/toggle" class="inline-form">
+          {% if item.is_active %}
+          <input type="hidden" name="is_active" value="false">
+          <button type="submit" class="danger">Deactivate</button>
+          {% else %}
+          <input type="hidden" name="is_active" value="true">
+          <button type="submit" class="secondary">Reactivate</button>
+          {% endif %}
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Add a catalog item</h2>
+{% if workflow_definitions.is_empty() %}
+<p class="hint">Create a workflow definition first.</p>
+{% else %}
+<div class="card">
+  <form method="post" action="/admin/catalog" class="stacked-form">
+    <label>Name <input type="text" name="name" required></label>
+    <label>Description <textarea name="description" rows="2"></textarea></label>
+    <label>Category <input type="text" name="category"></label>
+    <label>
+      Workflow
+      <select name="workflow_definition_id" required>
+        {% for def in workflow_definitions %}
+        <option value="{{ def.id }}">{{ def.name }} (v{{ def.version }}){% if !def.is_published %} - draft{% endif %}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="primary">Create catalog item</button>
+  </form>
+</div>
+{% endif %}
+{% endblock %}

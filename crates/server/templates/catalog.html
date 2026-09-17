@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Catalog - {{ layout.app_name }}{% endblock %}
+{% block content %}
+<h1>Service catalog</h1>
+
+{% if items.is_empty() %}
+<p class="empty-state">Nothing is available to request yet.</p>
+{% else %}
+<div class="card-grid">
+  {% for item in items %}
+  <div class="card">
+    <h2 style="margin-top:0">{{ item.name }}</h2>
+    {% if let Some(category) = item.category %}<p class="hint">{{ category }}</p>{% endif %}
+    {% if let Some(description) = item.description %}<p>{{ description }}</p>{% endif %}
+    <form method="post" action="/catalog/{{ item.id }}/request">
+      <button type="submit" class="primary">Request</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% if layout.is_admin %}
+<p class="hint"><a href="/admin/catalog">Manage catalog items &rarr;</a></p>
+{% endif %}
+{% endblock %}

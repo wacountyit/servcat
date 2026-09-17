@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}Workflows - {{ layout.app_name }}{% endblock %}
+{% block content %}
+<h1>Workflow definitions</h1>
+{% include "admin/_subnav.html" %}
+
+{% if let Some(err) = error %}
+<p class="alert alert-error">{{ err }}</p>
+{% endif %}
+
+<table>
+  <thead><tr><th>Name</th><th>Version</th><th>Target</th><th>Status</th><th></th></tr></thead>
+  <tbody>
+    {% for def in definitions %}
+    <tr>
+      <td>{{ def.name }}</td>
+      <td>{{ def.version }}</td>
+      <td>{% if let Some(target) = def.target_system %}{{ target.as_str() }}{% endif %}</td>
+      <td>{% if def.is_published %}Published{% else %}Draft{% endif %}</td>
+      <td>
+        {% if def.is_published %}
+        <form method="post" action="/admin/workflows/{{ def.id }}/unpublish" class="inline-form">
+          <button type="submit" class="secondary">Unpublish</button>
+        </form>
+        {% else %}
+        <form method="post" action="/admin/workflows/{{ def.id }}/publish" class="inline-form">
+          <button type="submit" class="primary">Publish</button>
+        </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<h2>Create a workflow definition</h2>
+<p class="hint">
+  There's no visual graph builder yet -- author the step graph as JSON directly. See
+  <code>ARCHITECTURE.md</code> for the full shape (<code>Question</code>, <code>Branch</code>,
+  <code>WaitForApproval</code>, <code>SubmitTicket</code> and <code>End</code> steps).
+</p>
+<div class="card">
+  <form method="post" action="/admin/workflows" class="stacked-form">
+    <label>Name <input type="text" name="name" required></label>
+    <label>
+      Target system (for the final <code>SubmitTicket</code> step, if any)
+      <select name="target_system">
+        <option value="">(none)</option>
+        <option value="jira">jira</option>
+        <option value="glpi">glpi</option>
+        <option value="freshservice">freshservice</option>
+        <option value="webhook">webhook</option>
+      </select>
+    </label>
+    <label>
+      Step graph (JSON)
+      <textarea name="graph_json" rows="14" required>{
+  "entry_step_id": "ask_summary",
+  "steps": [
+    {
+      "id": "ask_summary",
+      "label": "What do you need?",
+      "kind": {
+        "type": "question",
+        "field_key": "summary",
+        "input_type": "text_area",
+        "required": true,
+        "options": [],
+        "next": "end_ok"
+      }
+    },
+    {
+      "id": "end_ok",
+      "label": "Done",
+      "kind": { "type": "end", "outcome": "completed" }
+    }
+  ]
+}</textarea>
+    </label>
+    <label>
+      Field mapping (JSON object, target field name -&gt; Tera template string; optional)
+      <textarea name="field_mapping_json" rows="4"></textarea>
+    </label>
+    <p class="hint">
+      Example: <code>{% raw %}{"summary": "{{ answers.summary }}"}{% endraw %}</code>
+    </p>
+    <button type="submit" class="primary">Create workflow</button>
+  </form>
+</div>
+{% endblock %}
