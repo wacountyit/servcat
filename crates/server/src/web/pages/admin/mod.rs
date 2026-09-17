@@ -1,3 +1,4 @@
+mod audit_log;
 mod catalog;
 mod departments;
 mod settings;
@@ -16,6 +17,7 @@ pub fn routes() -> Router<AppState> {
         .merge(settings::routes())
         .merge(workflows::routes())
         .merge(catalog::routes())
+        .merge(audit_log::routes())
 }
 
 /// Every handler in `admin::*` calls this first -- there's no router-level

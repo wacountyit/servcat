@@ -1,4 +1,5 @@
 mod approvals;
+mod audit_log;
 mod auth;
 mod catalog;
 mod departments;
@@ -32,6 +33,7 @@ fn api_router() -> Router<AppState> {
         .merge(workflow_definitions::routes())
         .merge(instances::routes())
         .merge(approvals::routes())
+        .merge(audit_log::routes())
 }
 
 pub fn build_router(state: AppState) -> Router {

@@ -68,10 +68,12 @@ architecture behind these decisions, see [ARCHITECTURE.md](ARCHITECTURE.md).
   records-retention policy to `workflow_instances` and `audit_log`
   yourselves.
 - `audit_log` is append-only at the application layer (nothing updates or
-  deletes rows in it) for after-the-fact review of admin and approval
-  actions. It has no additional tamper-evidence (e.g. hash chaining); treat
-  database-level access controls and backups as your actual protection
-  against a compromised admin account editing history directly.
+  deletes rows in it), readable at `/admin/audit-log` (admin-only). Only
+  user create/update/deactivate is recorded today -- catalog/workflow
+  changes and approval decisions aren't wired up to it yet. It has no
+  additional tamper-evidence (e.g. hash chaining); treat database-level
+  access controls and backups as your actual protection against a
+  compromised admin account editing history directly.
 
 **Network surface**
 
@@ -92,7 +94,8 @@ architecture behind these decisions, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 - No rate limiting on `POST /auth/login` or `POST /auth/register`. Put a
   reverse proxy or WAF rate limit in front of both if this is reachable
-  from an untrusted network.
+  from an untrusted network -- see the production hardening checklist
+  below for concrete options.
 - `ApprovalNotifier` emails the approver via SMTP when configured
   (`SMTP_HOST`/`SMTP_FROM_ADDRESS`), otherwise falls back to logging only.
   Either way, nothing in the approval flow depends on a notification
@@ -101,6 +104,10 @@ architecture behind these decisions, see [ARCHITECTURE.md](ARCHITECTURE.md).
   no delivery/bounce tracking to audit approver awareness against.
 - Ticket dispatch has no automatic retry on failure; a failed dispatch
   needs manual follow-up today (see `tickets_repo::list_pending_dispatch`).
+- `audit_log` only records user create/update/deactivate today; catalog/
+  workflow authoring changes and approval decisions aren't recorded, so
+  `/admin/audit-log` can't yet answer "who approved/rejected this" or
+  "who changed this workflow" -- only "who touched this user account."
 - The SSO pending-login and one-time handoff-code state is in-process
   memory, not shared storage. This is fine for the single-`app`-replica
   topology this repo ships (`docker-compose.yml`), but would need to move
@@ -128,6 +135,31 @@ Work through this before exposing a deployment beyond your own machine:
 - [ ] If the host is on a shared or multi-tenant network, firewall
       everything except the reverse proxy's port; don't rely on the app
       port alone being "not commonly guessed."
+- [ ] Rate-limit `POST /api/auth/login` and `POST /api/auth/register`
+      (there is no in-app rate limiting -- see "Known gaps" above). This
+      has to happen in front of the app, at whichever layer is already
+      terminating your traffic:
+      - **Your own nginx/Traefik/NGINX Proxy Manager** (the "I already
+        have a reverse proxy" path in `install.sh`): add a `limit_req`
+        zone scoped to the auth paths, e.g. in nginx:
+        ```
+        limit_req_zone $binary_remote_addr zone=servcat_auth:10m rate=5r/m;
+        location ~ ^/api/auth/(login|register)$ {
+            limit_req zone=servcat_auth burst=5 nodelay;
+            proxy_pass http://127.0.0.1:8080;
+        }
+        ```
+      - **The bundled Caddy** (`install.sh`'s "set one up for me" path):
+        the stock `caddy:2-alpine` image `docker-compose.yml` uses has no
+        rate limiting built in. Either swap in a custom Caddy build with
+        the [`caddy-ratelimit`](https://github.com/mholt/caddy-ratelimit)
+        plugin, or put something in front of Caddy that can do it
+        (a cloud provider's WAF/load balancer, Cloudflare, etc.).
+      - If this deployment doesn't need to be reachable from the open
+        internet at all (common for an internal county IT tool), the
+        simplest and most robust option is often to just not expose it
+        publicly -- restrict it to your internal network or a VPN instead
+        of relying on rate limiting to make public exposure safe.
 - [ ] Put `scripts/backup-db.sh` on a schedule (cron/systemd timer) and
       actually run `scripts/restore-db.sh` against a test database at
       least once before you need it for real.

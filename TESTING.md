@@ -119,6 +119,21 @@ API; there is no frontend in this repo yet to click through.
       `/admin/settings`'s form (re-rendered with an inline error, not a
       generic error page). A non-admin gets 403.
 
+### Audit log
+
+- [ ] Creating, updating, and deactivating a user each add a row to
+      `audit_log`, visible newest-first at `/admin/audit-log` and via
+      `GET /api/audit-log`; the actor shown is the admin who did it, not
+      the affected user.
+- [ ] `/admin/audit-log` and `GET /api/audit-log` both return 403 for a
+      non-admin.
+- [ ] With more than one page of entries, `?page=2` shows the next-older
+      page and the "Newer"/"Older" links land on the expected pages; an
+      out-of-range page (e.g. `?page=9999`) shows an empty table rather
+      than erroring.
+- [ ] `GET /api/audit-log?page_size=99999` is clamped to the server's max
+      page size rather than returning the whole table in one response.
+
 ### Workflow lifecycle
 
 - [ ] Create and publish a `WorkflowDefinition` with at least one branch

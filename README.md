@@ -59,8 +59,9 @@ model, and deployment topology.
 
 `./install.sh` generates a `.env` with strong random secrets, walks through
 reverse-proxy/HTTPS, the host port, frontend CORS origin, a bootstrap admin
-account, the local sign-up toggle, and (optionally) Microsoft Entra ID SSO,
-then runs `docker compose up -d --build`. Re-running
+account, the local sign-up toggle, and (optionally) Microsoft Entra ID SSO
+and SMTP (for approval-notification emails and self-service password
+reset), then runs `docker compose up -d --build`. Re-running
 `docker compose up -d --build` after a code change only rebuilds/recreates
 the `app` container; MariaDB keeps running, so there's no database downtime
 on a redeploy.
@@ -139,6 +140,7 @@ via a session cookie instead, and isn't listed here.
 | POST | `/api/instances/{id}/answers` | user | submit an answer, advancing the workflow |
 | GET | `/api/approvals` | user | pending approvals assigned to you |
 | POST | `/api/approvals/{id}/decide` | user | approve or reject |
+| GET | `/api/audit-log` | admin | paginated audit trail (`?page=`, `?page_size=`, newest first) |
 
 ## Authentication
 
@@ -222,9 +224,12 @@ hardening checklist. Highlights:
 - Every request re-checks `is_active` against the database, so a deactivated
   account's still-unexpired access token stops working immediately.
 - All queries are parameterized through sqlx; no string-built SQL.
-- `audit_log` is an append-only trail of admin and approval actions
-  (catalog/workflow changes, user/role changes, approval decisions) for
-  after-the-fact review.
+- `audit_log` is an append-only trail, readable at `/admin/audit-log`
+  (or `GET /api/audit-log`) for after-the-fact review. Only user
+  create/update/deactivate is actually recorded today -- catalog/workflow
+  changes and approval decisions aren't audited yet despite being the
+  kind of thing this table exists for; adding those is just more call
+  sites to `audit::record`, not a schema change.
 - CORS defaults to allowing no cross-origin browser access at all unless
   `CORS_ALLOWED_ORIGINS` is set: safer than an accidental wildcard.
 - `WorkflowInstance.answers_json` may contain requester-submitted personal
@@ -273,8 +278,9 @@ Pages, by role:
   instance), `/approvals` (decide anything resolved to you, regardless of
   role -- same as the JSON API).
 - **Admin** (`/admin/users`, `/admin/departments`, `/admin/catalog`,
-  `/admin/workflows`, `/admin/settings`): user/department/catalog management,
-  org branding/signup toggle, and workflow definitions. Authoring a
+  `/admin/workflows`, `/admin/settings`, `/admin/audit-log`): user/
+  department/catalog management, org branding/signup toggle, workflow
+  definitions, and a paginated, read-only view of `audit_log`. Authoring a
   `WorkflowGraph` is still done as JSON in a textarea today -- there's no
   drag-and-drop graph builder yet.
 

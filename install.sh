@@ -144,6 +144,25 @@ EOF
         fi
 fi
 
+# --- App base URL ---
+# Used to build links back to this deployment in approval-notification and
+# password-reset emails (both features still work without it, just with a
+# bare relative link instead of a full URL). Only written when the reverse
+# proxy section above resolved to a real address -- the bare-IP Caddy branch
+# leaves a "<this-host-ip>" placeholder instead of an actual address, which
+# would be worse to email out than no link at all.
+if grep -q "^APP_BASE_URL=" .env 2>/dev/null; then
+        echo "App base URL already recorded in .env -- skipping."
+elif [[ "$public_base_url" == *"<this-host-ip>"* ]]; then
+        echo ""
+        echo "Skipping APP_BASE_URL -- add it to .env once you know this host's real,"
+        echo "reachable address (e.g. APP_BASE_URL=https://203.0.113.10), so approval"
+        echo "and password-reset emails include a working link."
+else
+        echo "APP_BASE_URL=${public_base_url}" >> .env
+        echo "App base URL recorded in .env: ${public_base_url}"
+fi
+
 # --- CORS ---
 # The bundled web UI is served by this same app and never makes a
 # cross-origin request, so it needs no entry here at all. This only matters
@@ -244,6 +263,75 @@ AZURE_REDIRECT_URI=
 SSO_FRONTEND_REDIRECT_URL=
 EOF
                 echo "Skipping SSO setup for now."
+        fi
+fi
+
+# --- SMTP (approval-notification emails, self-service password reset) ---
+if grep -q "^SMTP_HOST=" .env 2>/dev/null; then
+        echo "SMTP settings already recorded in .env -- skipping prompt."
+else
+        echo ""
+        echo "ServCat can email an approver when a request needs their decision, and"
+        echo "let local-account users reset a forgotten password themselves -- both"
+        echo "need an SMTP relay. This is optional -- leave the host blank to skip for"
+        echo "now (approvals fall back to being logged only, not emailed, and"
+        echo "self-service password reset stays unavailable); you can add these to"
+        echo ".env and restart later."
+        echo ""
+        read -rp "SMTP host (blank to skip): " smtp_host
+
+        if [ -n "$smtp_host" ]; then
+                echo ""
+                echo "Connection security:"
+                echo "  1) STARTTLS (default -- e.g. smtp.office365.com, port 587)"
+                echo "  2) Implicit TLS (typically port 465)"
+                echo "  3) None (an internal relay not reachable off-host/off-network)"
+                read -rp "Choice [1/2/3, default: 1]: " smtp_security_choice
+                case "$smtp_security_choice" in
+                        2) smtp_security="tls"; default_smtp_port=465 ;;
+                        3) smtp_security="none"; default_smtp_port=25 ;;
+                        *) smtp_security="starttls"; default_smtp_port=587 ;;
+                esac
+
+                read -rp "SMTP port [default: ${default_smtp_port}]: " smtp_port
+                smtp_port=${smtp_port:-$default_smtp_port}
+
+                read -rp "SMTP username (blank for an unauthenticated internal relay): " smtp_username
+                if [ -n "$smtp_username" ]; then
+                        read -rsp "SMTP password (input hidden): " smtp_password
+                        echo ""
+                else
+                        smtp_password=""
+                fi
+
+                default_from_address="servcat@${domain:-example.com}"
+                read -rp "From address [default: ${default_from_address}]: " smtp_from_address
+                smtp_from_address=${smtp_from_address:-$default_from_address}
+                default_from_name=${org_name:-ServCat}
+                read -rp "From display name [default: ${default_from_name}]: " smtp_from_name
+                smtp_from_name=${smtp_from_name:-$default_from_name}
+
+                cat >> .env << EOF
+SMTP_HOST=${smtp_host}
+SMTP_PORT=${smtp_port}
+SMTP_SECURITY=${smtp_security}
+SMTP_USERNAME=${smtp_username}
+SMTP_PASSWORD=${smtp_password}
+SMTP_FROM_ADDRESS=${smtp_from_address}
+SMTP_FROM_NAME=${smtp_from_name}
+EOF
+                echo "SMTP settings saved to .env."
+        else
+                cat >> .env << EOF
+SMTP_HOST=
+SMTP_PORT=
+SMTP_SECURITY=starttls
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_FROM_ADDRESS=
+SMTP_FROM_NAME=
+EOF
+                echo "Skipping SMTP setup for now."
         fi
 fi
 

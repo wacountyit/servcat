@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Audit log - {{ layout.app_name }}{% endblock %}
+{% block content %}
+<h1>Audit log</h1>
+{% include "admin/_subnav.html" %}
+
+<p class="hint">
+  Append-only trail of admin and account-management actions, newest first.
+  Approval decisions and catalog/workflow changes aren't recorded here yet --
+  only user create/update/deactivate today.
+</p>
+
+{% if rows.is_empty() %}
+<p class="empty-state">Nothing recorded yet.</p>
+{% else %}
+<table>
+  <thead>
+    <tr>
+      <th>When</th>
+      <th>Actor</th>
+      <th>Action</th>
+      <th>Entity</th>
+      <th>Details</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in rows %}
+    <tr>
+      <td>{{ layout.format_local(row.created_at) }}</td>
+      <td>{{ row.actor_label }}</td>
+      <td><code>{{ row.action }}</code></td>
+      <td>
+        {{ row.entity_type }}
+        {% if let Some(entity_id) = row.entity_id %}<span class="hint">{{ entity_id }}</span>{% endif %}
+      </td>
+      <td>{% if let Some(metadata) = row.metadata %}<code>{{ metadata }}</code>{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<div style="display:flex; justify-content:space-between; align-items:center; margin-top:14px;">
+  <div>
+    {% if has_prev %}<a href="/admin/audit-log?page={{ prev_page }}">&larr; Newer</a>{% endif %}
+  </div>
+  <span class="hint">Page {{ page }} of {{ total_pages }}</span>
+  <div>
+    {% if has_next %}<a href="/admin/audit-log?page={{ next_page }}">Older &rarr;</a>{% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

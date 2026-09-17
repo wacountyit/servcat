@@ -73,6 +73,17 @@ not cut a `0.1.0` release yet, so everything so far is under "Unreleased."
   stored/transmitted timestamps remain UTC everywhere regardless.
   Defaults to `UTC`; rejects anything that isn't a recognized IANA
   timezone name.
+- `install.sh` now interactively prompts for SMTP (host, port, security
+  mode, optional credentials, from-address/name), mirroring the existing
+  Entra ID SSO prompt -- optional, blank host skips it (writing blank
+  `SMTP_*` vars so a re-run doesn't re-prompt), same as before this was
+  only configurable by hand-editing `.env` after install.
+- Admin-only audit log viewer: `GET /api/audit-log` (paginated,
+  `?page=`/`?page_size=`) and `/admin/audit-log` in the web UI, resolving
+  `actor_user_id` to a display name and rendering timestamps through the
+  new `org_settings.timezone` setting. `audit_log` itself was already
+  populated (user create/update/deactivate) but had no way to read it
+  back short of querying the database directly.
 
 ### Fixed
 
@@ -83,6 +94,21 @@ not cut a `0.1.0` release yet, so everything so far is under "Unreleased."
   ticket when the connector returns a URL, the bare reference otherwise,
   and a plain "contact IT support" message (with the raw connector error
   visible to admins/agents only) on dispatch failure.
+- `install.sh` computed `public_base_url` for the reverse-proxy/HTTPS setup
+  step but never wrote it to `.env` as `APP_BASE_URL`, so a fresh install
+  would silently ship with broken/relative links in approval-notification
+  and password-reset emails until an admin noticed and added it by hand.
+  Now written automatically whenever the installer resolved a real
+  address (skipped, with an explanation, for the bare-IP Caddy branch,
+  which only has a `<this-host-ip>` placeholder at that point).
+- README.md/SECURITY.md described `audit_log` as covering "catalog/
+  workflow changes ... approval decisions" alongside user/role changes;
+  only the latter was ever actually recorded. Corrected to describe what's
+  actually wired up today, and noted in "Known gaps."
+- Documented concrete rate-limiting options (nginx `limit_req` snippet,
+  the bundled Caddy's lack of built-in rate limiting, and the option of
+  just not exposing this publicly) in SECURITY.md's production hardening
+  checklist, in place of a bare "put a rate limit in front of it" note.
 - `docker-compose.yml`'s MariaDB healthcheck lacked a startup grace
   period, so a brand-new data volume's first-time initialization (which
   can take well over a minute) could get marked unhealthy before it ever
