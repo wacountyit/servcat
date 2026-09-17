@@ -31,6 +31,14 @@ API; there is no frontend in this repo yet to click through.
 - [ ] `./install.sh` completes without errors on a machine with nothing
       set up yet, and `docker compose ps` shows `servcat-db` and
       `servcat-app` both healthy.
+- [ ] On a machine that already has something listening on 8080 and/or
+      3306 (e.g. `python3 -m http.server 8080` and a local MySQL/MariaDB),
+      `install.sh` detects both, offers the next free port for each, and
+      the resulting `.env`'s `DATABASE_URL` uses the chosen `DB_PORT` (not
+      3306) -- `scripts/migrate.sh` should still connect successfully.
+      Re-running `install.sh` against an `.env` from before `DB_PORT`
+      existed backfills it and fixes up `DATABASE_URL` to match, without
+      re-prompting for anything already recorded.
 - [ ] `curl http://localhost:$APP_PORT/health` returns `{"status":"ok"}`.
 - [ ] `curl http://localhost:$APP_PORT/config` returns the seeded
       `app_name` and `allow_local_signup` from `.env`.

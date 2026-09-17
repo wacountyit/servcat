@@ -67,8 +67,10 @@ the `app` container; MariaDB keeps running, so there's no database downtime
 on a redeploy.
 
 See `scripts/migrate.sh` (sqlx-cli, run from the host against the
-Docker-exposed `127.0.0.1:3306`), `scripts/backup-db.sh`, and
-`scripts/restore-db.sh` for day-to-day operations.
+Docker-exposed `127.0.0.1:<DB_PORT>`, `3306` unless `install.sh` picked a
+different port because something else already had 3306),
+`scripts/backup-db.sh`, and `scripts/restore-db.sh` for day-to-day
+operations.
 
 ### Running directly
 

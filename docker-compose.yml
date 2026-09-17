@@ -14,9 +14,11 @@ services:
       - servcat_db_data:/var/lib/mysql
     # Bound to localhost only -- lets scripts/migrate.sh (sqlx-cli, run on
     # the host) and scripts/backup-db.sh reach it without exposing MariaDB
-    # to the network.
+    # to the network. Container always listens on 3306 internally; only the
+    # host-side port is configurable (DB_PORT in .env), in case something
+    # else on this machine already has 3306 (another MySQL/MariaDB, etc.).
     ports:
-      - "127.0.0.1:3306:3306"
+      - "127.0.0.1:${DB_PORT:-3306}:3306"
     healthcheck:
       test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
       interval: 10s
@@ -67,6 +69,17 @@ services:
       AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
       AZURE_REDIRECT_URI: ${AZURE_REDIRECT_URI:-}
       SSO_FRONTEND_REDIRECT_URL: ${SSO_FRONTEND_REDIRECT_URL:-}
+      # SMTP relay for approval-notification emails and self-service
+      # password reset -- both features silently degrade to "unavailable"
+      # (see crates/server/src/main.rs) rather than fail if these are unset.
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-}
+      SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_ADDRESS: ${SMTP_FROM_ADDRESS:-}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME:-}
+      APP_BASE_URL: ${APP_BASE_URL:-}
       RUST_LOG: ${RUST_LOG:-info,servcat=debug,sqlx=warn}
     volumes:
       - servcat_uploads:/app/data/uploads

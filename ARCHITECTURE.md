@@ -186,8 +186,9 @@ this server itself wrote.
    (default 8080)       |  servcat-server    |        |  servcat-db        |
                         +-------------------+        +-------------------+
                           servcat_uploads volume        servcat_db_data volume
-                                                         127.0.0.1:3306 published
-                                                         (host tooling only)
+                                                         127.0.0.1:DB_PORT published
+                                                         (default 3306, host
+                                                         tooling only)
 ```
 
 - `mariadb`'s port is published to `127.0.0.1` only, so `scripts/migrate.sh`

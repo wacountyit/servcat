@@ -105,6 +105,23 @@ not cut a `0.1.0` release yet, so everything so far is under "Unreleased."
   workflow changes ... approval decisions" alongside user/role changes;
   only the latter was ever actually recorded. Corrected to describe what's
   actually wired up today, and noted in "Known gaps."
+- MariaDB's host-side port was hardcoded to `3306` in `docker-compose.yml`
+  with no way to change it, so `docker compose up` would fail outright
+  (`port is already allocated`) on a host already running some other
+  MySQL/MariaDB instance -- the same class of problem `APP_PORT` already
+  solved for the app's own port. `install.sh` now checks 3306 the same
+  way it already checks 8080 and prompts for an alternate `DB_PORT` if
+  it's taken; `docker-compose.yml`'s port mapping reads `DB_PORT` (default
+  3306). Since `DATABASE_URL` (used by `scripts/migrate.sh` on the host)
+  embeds this port directly, port selection now happens *before* `.env`
+  is generated instead of after, and re-running `install.sh` against an
+  older `.env` that predates `DB_PORT` backfills it and fixes up
+  `DATABASE_URL`'s port to match.
+- `docker-compose.yml`'s `app` service never actually passed
+  `SMTP_*`/`APP_BASE_URL` through to the container's environment, even
+  though `.env` (and now `install.sh`'s SMTP prompt) had them -- approval
+  notifications and password reset would silently stay disabled under
+  `docker compose up` regardless of `.env` being configured correctly.
 - Documented concrete rate-limiting options (nginx `limit_req` snippet,
   the bundled Caddy's lack of built-in rate limiting, and the option of
   just not exposing this publicly) in SECURITY.md's production hardening
