@@ -7,6 +7,7 @@ mod orchestrator;
 mod routes;
 mod sso;
 mod state;
+mod timezone;
 mod uploads;
 mod web;
 
@@ -45,10 +46,39 @@ async fn main() -> anyhow::Result<()> {
     )
     .await?;
 
+    let mailer: Option<Arc<servcat_approvals::Mailer>> = match &config.smtp {
+        Some(smtp) => Some(Arc::new(servcat_approvals::Mailer::new(
+            servcat_approvals::MailerConfig {
+                host: smtp.host.clone(),
+                port: smtp.port,
+                security: smtp.security,
+                username: smtp.username.clone(),
+                password: smtp.password.clone(),
+                from_address: smtp.from_address.clone(),
+                from_name: smtp.from_name.clone(),
+                app_base_url: config.app_base_url.clone(),
+            },
+        )?)),
+        None => {
+            tracing::warn!(
+                "SMTP is not configured (set SMTP_HOST and SMTP_FROM_ADDRESS) -- approval \
+                 notifications will only be written to the server log, and self-service \
+                 password reset is disabled"
+            );
+            None
+        }
+    };
+
+    let notifier: Arc<dyn servcat_approvals::ApprovalNotifier> = match &mailer {
+        Some(mailer) => Arc::new(servcat_approvals::SmtpNotifier::new(mailer.clone())),
+        None => servcat_approvals::default_notifier(),
+    };
+
     let state = AppState {
         pool,
         connectors: Arc::new(ConnectorRegistry::from_config(&config.connectors)),
-        notifier: servcat_approvals::default_notifier(),
+        notifier,
+        mailer,
         uploads_dir: config.uploads_dir.clone(),
         sso: config
             .sso

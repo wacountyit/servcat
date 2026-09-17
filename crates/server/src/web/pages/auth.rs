@@ -23,6 +23,14 @@ pub fn routes() -> Router<AppState> {
         .route("/login", get(show_login).post(submit_login))
         .route("/login/sso/complete", get(sso_complete))
         .route("/logout", post(logout))
+        .route(
+            "/forgot-password",
+            get(show_forgot_password).post(submit_forgot_password),
+        )
+        .route(
+            "/reset-password",
+            get(show_reset_password).post(submit_reset_password),
+        )
 }
 
 #[derive(Template)]
@@ -31,7 +39,11 @@ struct LoginTemplate {
     app_name: String,
     logo_url: Option<String>,
     sso_enabled: bool,
+    /// Only true when a `Mailer` is configured -- self-service password
+    /// reset needs somewhere to actually send the link.
+    reset_enabled: bool,
     invalid_credentials: bool,
+    reset_success: bool,
     next: String,
 }
 
@@ -40,6 +52,8 @@ struct LoginQuery {
     next: Option<String>,
     #[serde(default)]
     error: bool,
+    #[serde(default)]
+    reset: bool,
 }
 
 /// Only a same-site path is ever accepted as a post-login destination --
@@ -69,7 +83,9 @@ async fn show_login(
         app_name: settings.app_name,
         logo_url: settings.logo_url,
         sso_enabled: state.sso.is_some(),
+        reset_enabled: state.mailer.is_some(),
         invalid_credentials: query.error,
+        reset_success: query.reset,
         next,
     }))
 }
@@ -138,4 +154,130 @@ async fn logout(State(state): State<AppState>, jar: CookieJar) -> Response {
     let mut res = Redirect::to("/login").into_response();
     session::clear_session_cookies(&mut res);
     res
+}
+
+#[derive(Template)]
+#[template(path = "forgot_password.html")]
+struct ForgotPasswordTemplate {
+    app_name: String,
+    logo_url: Option<String>,
+    submitted: bool,
+}
+
+/// Redirects to `/login` instead of rendering when no `Mailer` is
+/// configured, same as `reset_enabled` hiding the link on the login page --
+/// self-service reset genuinely isn't available on this deployment, not
+/// just unadvertised.
+async fn show_forgot_password(State(state): State<AppState>) -> Result<Response, WebError> {
+    if state.mailer.is_none() {
+        return Ok(Redirect::to("/login").into_response());
+    }
+
+    let settings = org_settings::get(&state.pool).await?;
+    Ok(html(ForgotPasswordTemplate {
+        app_name: settings.app_name,
+        logo_url: settings.logo_url,
+        submitted: false,
+    }))
+}
+
+#[derive(Deserialize)]
+struct ForgotPasswordForm {
+    email: String,
+}
+
+async fn submit_forgot_password(
+    State(state): State<AppState>,
+    Form(form): Form<ForgotPasswordForm>,
+) -> Result<Response, WebError> {
+    let Some(mailer) = state.mailer.as_deref() else {
+        return Ok(Redirect::to("/login").into_response());
+    };
+    auth::send_password_reset_email(&state.pool, mailer, &form.email).await?;
+
+    let settings = org_settings::get(&state.pool).await?;
+    Ok(html(ForgotPasswordTemplate {
+        app_name: settings.app_name,
+        logo_url: settings.logo_url,
+        submitted: true,
+    }))
+}
+
+#[derive(Template)]
+#[template(path = "reset_password.html")]
+struct ResetPasswordTemplate {
+    app_name: String,
+    logo_url: Option<String>,
+    invalid_token: bool,
+    token: String,
+    error: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct ResetPasswordQuery {
+    token: Option<String>,
+}
+
+/// Doesn't validate the token yet (that only happens, and single-use-burns
+/// it, on `submit_reset_password`) -- an empty/missing query param is the
+/// only thing checked here, just enough to show a sane page for a bare
+/// `/reset-password` visit instead of an empty form.
+async fn show_reset_password(
+    State(state): State<AppState>,
+    Query(query): Query<ResetPasswordQuery>,
+) -> Result<Response, WebError> {
+    let settings = org_settings::get(&state.pool).await?;
+    let token = query.token.unwrap_or_default();
+    Ok(html(ResetPasswordTemplate {
+        app_name: settings.app_name,
+        logo_url: settings.logo_url,
+        invalid_token: token.is_empty(),
+        token,
+        error: None,
+    }))
+}
+
+#[derive(Deserialize)]
+struct ResetPasswordForm {
+    token: String,
+    new_password: String,
+}
+
+async fn submit_reset_password(
+    State(state): State<AppState>,
+    Form(form): Form<ResetPasswordForm>,
+) -> Result<Response, WebError> {
+    let settings = org_settings::get(&state.pool).await?;
+
+    if form.new_password.len() < 12 {
+        return Ok(html(ResetPasswordTemplate {
+            app_name: settings.app_name,
+            logo_url: settings.logo_url,
+            invalid_token: false,
+            token: form.token,
+            error: Some("Password must be at least 12 characters.".to_string()),
+        }));
+    }
+
+    let user_id = match auth::redeem_password_reset_token(&state.pool, &form.token).await {
+        Ok(user_id) => user_id,
+        Err(_) => {
+            return Ok(html(ResetPasswordTemplate {
+                app_name: settings.app_name,
+                logo_url: settings.logo_url,
+                invalid_token: true,
+                token: form.token,
+                error: None,
+            }));
+        }
+    };
+
+    let password_hash = auth::hash_password(&form.new_password)?;
+    servcat_db::repositories::users::set_password_hash(&state.pool, user_id, &password_hash)
+        .await?;
+    // Same reasoning as deactivating a user: a password reset should also
+    // sign out anyone still using the old (possibly compromised) password.
+    auth::revoke_all_sessions(&state.pool, user_id).await?;
+
+    Ok(Redirect::to("/login?reset=1").into_response())
 }

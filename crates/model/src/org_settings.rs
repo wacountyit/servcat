@@ -10,6 +10,10 @@ pub struct OrgSettings {
     pub app_name: String,
     pub logo_url: Option<String>,
     pub allow_local_signup: bool,
+    /// IANA timezone name (e.g. `"America/Chicago"`) used only to render
+    /// timestamps in the web UI and in notification emails -- every stored
+    /// timestamp remains UTC regardless of this setting. Defaults to `"UTC"`.
+    pub timezone: String,
     pub updated_at: Timestamp,
 }
 
@@ -17,6 +21,7 @@ pub struct OrgSettings {
 pub struct UpdateOrgSettings {
     pub app_name: Option<String>,
     pub allow_local_signup: Option<bool>,
+    pub timezone: Option<String>,
 }
 
 /// Unauthenticated projection served to a browser/Tauri app that doesn't

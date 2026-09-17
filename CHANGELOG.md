@@ -53,9 +53,36 @@ not cut a `0.1.0` release yet, so everything so far is under "Unreleased."
   `main`), `docker-publish.yml` (builds and pushes to GHCR on `main` and
   version tags, no secrets to configure), and `release.yml` (a version tag
   builds a standalone release binary and cuts a GitHub Release).
+- `Mailer` (`crates/approvals`), a shared SMTP relay client
+  (`SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURITY`/`SMTP_USERNAME`/`SMTP_PASSWORD`/
+  `SMTP_FROM_ADDRESS`/`SMTP_FROM_NAME`, plus `APP_BASE_URL` for links back
+  to this deployment), backing two features:
+  - `SmtpNotifier`: emails an approver when a `PendingApproval` is created
+    for them, with a link straight to `/approvals`. Falls back to the
+    existing log-only `LoggingNotifier` when SMTP isn't configured, same
+    as before.
+  - Self-service password reset: `POST /auth/password-reset/request`/
+    `.../confirm` (and the web UI's `/forgot-password` ->
+    `/reset-password` pages), backed by single-use, 30-minute tokens
+    (`password_resets`, migration `0008`) hashed the same way as
+    `sessions.refresh_token_hash`. Unavailable entirely (404 from the
+    API, hidden/redirected in the web UI) unless SMTP is configured.
+- `org_settings.timezone` (migration `0009`), an admin-only setting
+  (`/admin/settings`, `PATCH /admin/settings`) controlling how timestamps
+  are *displayed* in the web UI and approval notification emails --
+  stored/transmitted timestamps remain UTC everywhere regardless.
+  Defaults to `UTC`; rejects anything that isn't a recognized IANA
+  timezone name.
 
 ### Fixed
 
+- The requester-facing `/requests/{id}` page never surfaced the resulting
+  ticket once a `SubmitTicket` step dispatched successfully (or failed),
+  even though `tickets.external_ticket_id`/`external_ticket_url` were
+  already captured in the database. It now shows a link to the external
+  ticket when the connector returns a URL, the bare reference otherwise,
+  and a plain "contact IT support" message (with the raw connector error
+  visible to admins/agents only) on dispatch failure.
 - `docker-compose.yml`'s MariaDB healthcheck lacked a startup grace
   period, so a brand-new data volume's first-time initialization (which
   can take well over a minute) could get marked unhealthy before it ever

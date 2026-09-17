@@ -1,5 +1,7 @@
 use std::{env, net::SocketAddr, path::PathBuf, time::Duration};
 
+use servcat_approvals::SmtpSecurity;
+
 #[derive(Debug, Clone)]
 pub struct AppConfig {
     pub database_url: String,
@@ -21,6 +23,26 @@ pub struct AppConfig {
     pub bootstrap_allow_local_signup: bool,
     pub sso: Option<AzureSsoConfig>,
     pub connectors: ConnectorsConfig,
+    pub smtp: Option<SmtpConfig>,
+    /// This deployment's own externally-reachable base URL (e.g.
+    /// `https://servcat.example.com`, no trailing slash required), used only
+    /// to build a link straight to `/approvals` in approval notification
+    /// emails. Notifications still work without it, just without a link.
+    pub app_base_url: Option<String>,
+}
+
+/// SMTP relay used to email approvers when an approval is created for them
+/// (`servcat_approvals::SmtpNotifier`). Only enabled if `SMTP_HOST` and
+/// `SMTP_FROM_ADDRESS` are both set -- see `AppConfig::from_env`.
+#[derive(Debug, Clone)]
+pub struct SmtpConfig {
+    pub host: String,
+    pub port: Option<u16>,
+    pub security: SmtpSecurity,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub from_address: String,
+    pub from_name: Option<String>,
 }
 
 /// Microsoft Entra ID (Azure AD) OIDC configuration. Only enabled if every
@@ -133,6 +155,39 @@ impl AppConfig {
             }
         };
 
+        let smtp = match (env_var("SMTP_HOST"), env_var("SMTP_FROM_ADDRESS")) {
+            (Some(host), Some(from_address)) => {
+                let port = env::var("SMTP_PORT").ok().and_then(|v| v.parse().ok());
+                let security = match env_var("SMTP_SECURITY").as_deref() {
+                    None | Some("starttls") => SmtpSecurity::StartTls,
+                    Some("tls") => SmtpSecurity::ImplicitTls,
+                    Some("none") => SmtpSecurity::None,
+                    Some(other) => {
+                        anyhow::bail!(
+                            "invalid SMTP_SECURITY '{other}' (expected 'starttls', 'tls', or 'none')"
+                        );
+                    }
+                };
+                Some(SmtpConfig {
+                    host,
+                    port,
+                    security,
+                    username: env_var("SMTP_USERNAME"),
+                    password: env_var("SMTP_PASSWORD"),
+                    from_address,
+                    from_name: env_var("SMTP_FROM_NAME"),
+                })
+            }
+            (None, None) => None,
+            _ => {
+                tracing::warn!(
+                    "SMTP is only partially configured (need both SMTP_HOST and \
+                     SMTP_FROM_ADDRESS) -- approval notifications will only be logged, not emailed"
+                );
+                None
+            }
+        };
+
         Ok(Self {
             database_url,
             bind_addr,
@@ -146,6 +201,8 @@ impl AppConfig {
             bootstrap_app_name: env_var("APP_NAME"),
             bootstrap_allow_local_signup,
             sso,
+            smtp,
+            app_base_url: env_var("APP_BASE_URL"),
             connectors: ConnectorsConfig {
                 webhook_url: env_var("WEBHOOK_URL"),
                 webhook_bearer_token: env_var("WEBHOOK_BEARER_TOKEN"),

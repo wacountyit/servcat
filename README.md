@@ -109,6 +109,8 @@ via a session cookie instead, and isn't listed here.
 | POST | `/api/auth/register` | none | local self-registration, 403 unless `allow_local_signup` |
 | POST | `/api/auth/refresh` | none | rotate a refresh token for a new access/refresh pair |
 | POST | `/api/auth/logout` | none | revoke a refresh token |
+| POST | `/api/auth/password-reset/request` | none | email a reset link if `email` has a local-password account; 404 if no `Mailer` is configured |
+| POST | `/api/auth/password-reset/confirm` | none | redeem a reset token for a new password, revoking existing sessions |
 | GET | `/api/auth/sso/login` | none | redirects to Microsoft Entra ID |
 | GET | `/api/auth/sso/callback` | none | Entra ID's redirect target; provisions/links the user |
 | POST | `/api/auth/sso/token` | none | exchanges a one-time handoff code for a token pair |
@@ -149,6 +151,13 @@ Two ways in, both ending in the same access/refresh JWT pair:
   the current value. The web UI itself doesn't expose a self-registration
   page today (admins create accounts from `/admin/users` instead) -- this
   flag mainly matters if something else calls the JSON API directly.
+  Self-service password reset (`POST /api/auth/password-reset/request`
+  -> `.../confirm`, or the web UI's `/forgot-password` ->
+  `/reset-password` pages) is available whenever `SMTP_HOST`/
+  `SMTP_FROM_ADDRESS` are configured (see `.env.example` and "What's
+  stubbed" below) -- a single-use, 30-minute token (`password_resets`,
+  hashed the same way as `sessions.refresh_token_hash`) is emailed to the
+  account, and redeeming it revokes all of that user's existing sessions.
 - **Microsoft Entra ID (Azure AD) SSO** (`GET /api/auth/sso/login` ->
   `/api/auth/sso/callback` -> `POST /api/auth/sso/token`): this server is
   the confidential OAuth client (holds the client secret) and validates the
@@ -189,6 +198,14 @@ and served back from `/uploads/...`.
 time the server starts against a fresh database; change them afterwards via
 `PATCH /admin/settings`, not by editing `.env` and restarting.
 
+`org_settings.timezone` (an IANA name, e.g. `America/Chicago`; defaults to
+`UTC`) is admin-editable the same way, from `/admin/settings` or
+`PATCH /admin/settings`, and controls only how timestamps are *displayed* --
+in the web UI (requests/approvals lists) and in approval notification
+emails. Every timestamp is still stored and passed between components in
+UTC; changing this setting is always safe and has no effect on connector
+payloads, the audit log, or anything else on-disk.
+
 ## Security & privacy notes
 
 See [SECURITY.md](SECURITY.md) for the full list and the production
@@ -222,9 +239,14 @@ hardening checklist. Highlights:
 
 ## What's stubbed / left for follow-up
 
-- **Notifications**: `ApprovalNotifier` only logs today. Wire it to real
-  email/Slack/Teams before relying on it; nothing in the approval flow
-  depends on notification actually succeeding.
+- **Notifications**: `ApprovalNotifier` emails the approver via SMTP
+  (`SmtpNotifier`, backed by the shared `Mailer`) when `SMTP_HOST`/
+  `SMTP_FROM_ADDRESS` are configured (see `.env.example`); otherwise it
+  falls back to `LoggingNotifier`, which only writes to the server log.
+  Slack/Teams are still unwired -- nothing in the approval flow depends on
+  notification actually succeeding either way. The same `Mailer` also backs
+  self-service password reset (see "Authentication" above), so both
+  features come online together once SMTP is configured.
 - **Approver fan-out**: `ApproverResolution::RoleInDepartment` picks the
   first matching active user rather than creating a multi-approver queue.
 - **Ticket dispatch retries**: a failed dispatch marks the ticket `failed`

@@ -39,6 +39,23 @@ pub async fn get_by_id(pool: &Pool, id: Uuid) -> Result<Option<Ticket>, DbError>
     Ok(ticket)
 }
 
+/// The ticket dispatched for a given `WorkflowInstance`, if the workflow has
+/// reached its `SubmitTicket` step. There is at most one row per instance
+/// today (`orchestrator::dispatch_ticket` creates exactly one), so the most
+/// recently created row is the only one that can exist.
+pub async fn get_by_instance_id(
+    pool: &Pool,
+    workflow_instance_id: Uuid,
+) -> Result<Option<Ticket>, DbError> {
+    let ticket = sqlx::query_as::<_, Ticket>(&format!(
+        "{SELECT} WHERE workflow_instance_id = ? ORDER BY created_at DESC LIMIT 1"
+    ))
+    .bind(workflow_instance_id)
+    .fetch_optional(pool)
+    .await?;
+    Ok(ticket)
+}
+
 pub async fn list_pending_dispatch(pool: &Pool) -> Result<Vec<Ticket>, DbError> {
     let tickets = sqlx::query_as::<_, Ticket>(&format!(
         "{SELECT} WHERE dispatch_status = 'pending' ORDER BY created_at"

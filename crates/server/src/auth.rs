@@ -112,7 +112,7 @@ pub(crate) fn verify_access_token(
     Ok((data.claims.sub, data.claims.role))
 }
 
-fn hash_refresh_token(raw: &str) -> String {
+fn sha256_hex(raw: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(raw.as_bytes());
     hex::encode(hasher.finalize())
@@ -131,7 +131,7 @@ pub async fn create_session(
     let mut raw_bytes = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut raw_bytes);
     let raw_token = hex::encode(raw_bytes);
-    let token_hash = hash_refresh_token(&raw_token);
+    let token_hash = sha256_hex(&raw_token);
     let expires_at: DateTime<Utc> =
         Utc::now() + ChronoDuration::from_std(config.refresh_token_ttl).unwrap();
 
@@ -157,7 +157,7 @@ pub async fn create_session(
 /// `create_session` alongside a new access token (rotation limits the blast
 /// radius of a leaked refresh token to a single use).
 pub async fn redeem_refresh_token(pool: &Pool, raw_token: &str) -> Result<Uuid, ApiError> {
-    let token_hash = hash_refresh_token(raw_token);
+    let token_hash = sha256_hex(raw_token);
 
     let row: Option<(Uuid, Uuid)> = sqlx::query_as(
         "SELECT id, user_id FROM sessions \
@@ -186,6 +186,109 @@ pub async fn revoke_all_sessions(pool: &Pool, user_id: Uuid) -> Result<(), ApiEr
         .await
         .map_err(servcat_db::DbError::from)?;
     Ok(())
+}
+
+const PASSWORD_RESET_TTL_MINUTES: i64 = 30;
+
+/// Creates a single-use password reset token for `user_id`, valid for
+/// `PASSWORD_RESET_TTL_MINUTES`, and returns the raw token -- only its
+/// SHA-256 hash is stored (`password_resets.token_hash`), mirroring
+/// `sessions.refresh_token_hash`; the raw value only ever exists in the
+/// emailed reset link, never in the database or logs.
+async fn create_password_reset_token(pool: &Pool, user_id: Uuid) -> Result<String, ApiError> {
+    let mut raw_bytes = [0u8; 32];
+    rand::thread_rng().fill_bytes(&mut raw_bytes);
+    let raw_token = hex::encode(raw_bytes);
+    let token_hash = sha256_hex(&raw_token);
+    let expires_at: DateTime<Utc> =
+        Utc::now() + ChronoDuration::minutes(PASSWORD_RESET_TTL_MINUTES);
+
+    sqlx::query(
+        "INSERT INTO password_resets (id, user_id, token_hash, expires_at) VALUES (?, ?, ?, ?)",
+    )
+    .bind(Uuid::new_v4())
+    .bind(user_id)
+    .bind(&token_hash)
+    .bind(expires_at)
+    .execute(pool)
+    .await
+    .map_err(servcat_db::DbError::from)?;
+
+    Ok(raw_token)
+}
+
+/// Best-effort: emails a password-reset link if (and only if) `email`
+/// belongs to an active account with a local password set. Otherwise does
+/// nothing and still returns `Ok(())` -- callers (the JSON API and the web
+/// UI) must respond identically either way, so this endpoint can't be used
+/// to enumerate which emails have accounts, whether they're SSO-only, or
+/// whether they're deactivated.
+pub async fn send_password_reset_email(
+    pool: &Pool,
+    mailer: &servcat_approvals::Mailer,
+    email: &str,
+) -> Result<(), ApiError> {
+    let Some(user) = users::get_by_email(pool, email).await? else {
+        return Ok(());
+    };
+    if !user.is_active || user.password_hash.is_none() {
+        return Ok(());
+    }
+
+    let token = create_password_reset_token(pool, user.id).await?;
+    let link = format!(
+        "{}/reset-password?token={token}",
+        mailer
+            .app_base_url()
+            .unwrap_or_default()
+            .trim_end_matches('/')
+    );
+    let body = format!(
+        "A password reset was requested for your account.\n\n\
+         If this was you, set a new password here (valid for {PASSWORD_RESET_TTL_MINUTES} minutes):\n\
+         {link}\n\n\
+         If you didn't request this, you can safely ignore this email -- your password hasn't \
+         been changed.\n"
+    );
+
+    if let Err(err) = mailer
+        .send_plain_text(&user.email, "Reset your password", body)
+        .await
+    {
+        tracing::error!(error = %err, user_id = %user.id, "failed to send password reset email");
+    }
+    Ok(())
+}
+
+/// Validates a raw password-reset token (unused, unexpired), marks it used
+/// (single-use, same rationale as refresh-token rotation), and returns the
+/// user it belongs to. Maps a missing/expired/already-used token to
+/// `BadRequest` rather than `Unauthorized` -- this is a public,
+/// unauthenticated endpoint, so an invalid link is a bad-input problem, not
+/// a missing-credential one.
+pub async fn redeem_password_reset_token(pool: &Pool, raw_token: &str) -> Result<Uuid, ApiError> {
+    let token_hash = sha256_hex(raw_token);
+
+    let row: Option<(Uuid, Uuid)> = sqlx::query_as(
+        "SELECT id, user_id FROM password_resets \
+         WHERE token_hash = ? AND used_at IS NULL AND expires_at > CURRENT_TIMESTAMP",
+    )
+    .bind(&token_hash)
+    .fetch_optional(pool)
+    .await
+    .map_err(servcat_db::DbError::from)?;
+
+    let (reset_id, user_id) = row.ok_or_else(|| {
+        ApiError::BadRequest("this password reset link is invalid or has expired".into())
+    })?;
+
+    sqlx::query("UPDATE password_resets SET used_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .bind(reset_id)
+        .execute(pool)
+        .await
+        .map_err(servcat_db::DbError::from)?;
+
+    Ok(user_id)
 }
 
 /// Authenticated-user extractor: validates the bearer JWT's signature and

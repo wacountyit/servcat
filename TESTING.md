@@ -68,6 +68,17 @@ API; there is no frontend in this repo yet to click through.
       still-unexpired access token, then confirm their next request with
       that token gets 401. `is_active` is re-checked on every request, so
       this should be immediate, not wait out the token's TTL.
+- [ ] With SMTP configured, `POST /auth/password-reset/request` for a real
+      local account emails a working `/reset-password?token=...` link;
+      for a nonexistent email, an SSO-only account, or a deactivated
+      account, it responds identically (202) but sends nothing.
+- [ ] `POST /auth/password-reset/confirm` with that token sets the new
+      password (confirm you can log in with it), and a second confirm
+      with the same token fails (single-use). An old refresh token from
+      before the reset should no longer work afterwards.
+- [ ] With SMTP unset, `POST /auth/password-reset/request` returns 404,
+      and the web UI hides the "Forgot your password?" link and redirects
+      `/forgot-password` to `/login`.
 
 ### SSO (once Microsoft Entra ID is configured)
 
@@ -101,6 +112,12 @@ API; there is no frontend in this repo yet to click through.
 - [ ] `DELETE /admin/settings/logo` clears `logo_url` and removes the file.
 - [ ] Repeat the last three checks against
       `POST`/`DELETE /departments/{id}/logo` for a department seal.
+- [ ] `PATCH /admin/settings {"timezone": "America/Chicago"}` succeeds and
+      the requests/approvals lists in the web UI immediately show times
+      shifted accordingly (with a `CST`/`CDT` suffix); a bogus value like
+      `"Not/AZone"` is rejected with 400 both from the JSON API and from
+      `/admin/settings`'s form (re-rendered with an inline error, not a
+      generic error page). A non-admin gets 403.
 
 ### Workflow lifecycle
 
@@ -122,3 +139,16 @@ API; there is no frontend in this repo yet to click through.
 - [ ] A workflow whose `target_system` has no configured connector fails
       dispatch with a logged error and a `failed` ticket/instance status,
       not a crash.
+
+### Approval notifications
+
+- [ ] With `SMTP_HOST`/`SMTP_FROM_ADDRESS` unset, triggering an approval
+      only logs it (`LoggingNotifier`) -- confirm the startup log warns
+      that SMTP isn't configured.
+- [ ] With SMTP configured against a real relay (or a local catch-all like
+      Mailpit/MailHog for a dry run), triggering an approval actually
+      delivers an email to the resolved approver, with a working
+      `/approvals` link if `APP_BASE_URL` is set.
+- [ ] An approver with a malformed email, or an unreachable/misconfigured
+      relay, logs an error but does not fail the approval creation itself
+      -- the approval still shows up in `/approvals`.

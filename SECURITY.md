@@ -46,6 +46,16 @@ architecture behind these decisions, see [ARCHITECTURE.md](ARCHITECTURE.md).
 - Local self-registration (`POST /auth/register`) is off by default
   (`org_settings.allow_local_signup = false`) and independently enforced
   server-side, not just hidden in a frontend.
+- Password reset (`POST /auth/password-reset/request`/`.../confirm`) uses
+  single-use, 30-minute tokens stored the same way as refresh tokens --
+  only a SHA-256 hash in `password_resets`, never the raw value. The
+  request endpoint always responds identically (202, or a background
+  no-op) whether or not the email has an account, is SSO-only, or is
+  deactivated, so it can't be used to enumerate accounts; the whole
+  feature is unavailable (404 from the API, hidden/redirected in the web
+  UI) unless SMTP is configured, rather than silently accepting requests
+  it can't actually deliver on. A successful reset revokes all of that
+  user's existing sessions.
 
 **Data handling**
 
@@ -83,9 +93,12 @@ architecture behind these decisions, see [ARCHITECTURE.md](ARCHITECTURE.md).
 - No rate limiting on `POST /auth/login` or `POST /auth/register`. Put a
   reverse proxy or WAF rate limit in front of both if this is reachable
   from an untrusted network.
-- `ApprovalNotifier` only logs; nothing in the approval flow depends on a
-  notification actually reaching anyone, but there is also no email/Slack
-  trail to audit approver awareness against.
+- `ApprovalNotifier` emails the approver via SMTP when configured
+  (`SMTP_HOST`/`SMTP_FROM_ADDRESS`), otherwise falls back to logging only.
+  Either way, nothing in the approval flow depends on a notification
+  actually reaching anyone -- a missed or bounced email doesn't block an
+  approver from acting via the in-app `/approvals` inbox, but there's also
+  no delivery/bounce tracking to audit approver awareness against.
 - Ticket dispatch has no automatic retry on failure; a failed dispatch
   needs manual follow-up today (see `tickets_repo::list_pending_dispatch`).
 - The SSO pending-login and one-time handoff-code state is in-process

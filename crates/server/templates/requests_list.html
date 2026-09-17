@@ -11,7 +11,7 @@
   <tbody>
     {% for r in requests %}
     <tr>
-      <td>{{ r.created_at.format("%Y-%m-%d %H:%M") }}</td>
+      <td>{{ layout.format_local(r.created_at) }}</td>
       <td><span class="badge badge-{{ r.status.as_str() }}">{{ r.status.label() }}</span></td>
       <td><a href="/requests/{{ r.id }}">View &rarr;</a></td>
     </tr>

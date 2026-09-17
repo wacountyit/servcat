@@ -9,7 +9,7 @@
 {% for a in approvals %}
 <div class="card">
   <p><strong>{{ a.catalog_item_name }}</strong> requested by {{ a.requester_display_name }}</p>
-  <p class="hint">Submitted {{ a.created_at.format("%Y-%m-%d %H:%M") }}</p>
+  <p class="hint">Submitted {{ layout.format_local(a.created_at) }}</p>
   <form method="post" action="/approvals/{{ a.id }}/decide" class="stacked-form">
     <label>
       Comment (optional)

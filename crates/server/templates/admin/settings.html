@@ -5,6 +5,9 @@
 {% include "admin/_subnav.html" %}
 
 <div class="card">
+  {% if let Some(err) = error %}
+  <p class="alert alert-error">{{ err }}</p>
+  {% endif %}
   <form method="post" action="/admin/settings" class="stacked-form">
     <label>
       Organization name
@@ -14,6 +17,19 @@
       <input type="checkbox" name="allow_local_signup" value="true" {% if allow_local_signup %}checked{% endif %} style="width:auto;">
       Allow local email/password self-registration
     </label>
+    <label>
+      Timezone
+      <select name="timezone" required>
+        {% for tz in timezones %}
+        <option value="{{ tz.name }}" {% if tz.selected %}selected{% endif %}>{{ tz.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <p class="hint">
+      Controls how timestamps are displayed throughout the app (requests,
+      approvals, notification emails) -- everything is still stored in UTC
+      underneath, so changing this is always safe.
+    </p>
     <p class="hint">
       Single sign-on is
       {% if sso_enabled %}configured (Microsoft Entra ID).{% else %}not configured -- set the AZURE_* environment variables to enable it.{% endif %}

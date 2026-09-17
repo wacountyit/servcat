@@ -16,6 +16,10 @@ pub struct Layout {
     pub user_role_label: &'static str,
     pub is_admin: bool,
     pub active_nav: &'static str,
+    /// The org's admin-configured display timezone (IANA name, e.g.
+    /// `"America/Chicago"`) -- see `crate::timezone`. Templates should
+    /// prefer `format_local` over reading this field directly.
+    pub timezone: String,
 }
 
 impl Layout {
@@ -32,6 +36,16 @@ impl Layout {
             user_role_label: user.role.label(),
             is_admin: user.role == Role::Admin,
             active_nav,
+            timezone: settings.timezone,
         })
+    }
+
+    /// Renders a stored UTC timestamp in the org's configured timezone --
+    /// used from templates as `{{ layout.format_local(some_timestamp) }}`.
+    /// Takes `dt` by reference because Askama passes call arguments by
+    /// reference regardless of the field's actual type (see
+    /// `is_selected_parent` in `admin/departments.rs` for the same gotcha).
+    pub fn format_local(&self, dt: &chrono::DateTime<chrono::Utc>) -> String {
+        crate::timezone::format_local(dt, &self.timezone)
     }
 }

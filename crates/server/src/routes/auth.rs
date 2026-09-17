@@ -1,4 +1,4 @@
-use axum::{Json, Router, extract::State, routing::post};
+use axum::{Json, Router, extract::State, http::StatusCode, routing::post};
 use serde::Deserialize;
 use servcat_db::repositories::{org_settings, users};
 use servcat_model::{NewUser, Role};
@@ -15,6 +15,8 @@ pub fn routes() -> Router<AppState> {
         .route("/auth/register", post(register))
         .route("/auth/refresh", post(refresh))
         .route("/auth/logout", post(logout))
+        .route("/auth/password-reset/request", post(request_password_reset))
+        .route("/auth/password-reset/confirm", post(confirm_password_reset))
 }
 
 #[derive(Deserialize)]
@@ -131,5 +133,51 @@ async fn logout(
     // the client's point of view, since the end state (not logged in with
     // that token) is the same either way.
     let _ = auth::redeem_refresh_token(&state.pool, &req.refresh_token).await;
+    Ok(())
+}
+
+#[derive(Deserialize)]
+struct PasswordResetRequest {
+    email: String,
+}
+
+/// Always responds 202 regardless of whether `email` has an account, is
+/// SSO-only, or is deactivated -- see `auth::send_password_reset_email` for
+/// why. Responds 404 instead if no SMTP mailer is configured at all, since
+/// self-service reset is then a deployment-wide unavailable feature, not a
+/// per-request secret.
+async fn request_password_reset(
+    State(state): State<AppState>,
+    Json(req): Json<PasswordResetRequest>,
+) -> Result<StatusCode, ApiError> {
+    let mailer = state.mailer.as_deref().ok_or_else(|| {
+        ApiError::NotFound("password reset is not enabled on this deployment".into())
+    })?;
+    auth::send_password_reset_email(&state.pool, mailer, &req.email).await?;
+    Ok(StatusCode::ACCEPTED)
+}
+
+#[derive(Deserialize)]
+struct PasswordResetConfirm {
+    token: String,
+    new_password: String,
+}
+
+async fn confirm_password_reset(
+    State(state): State<AppState>,
+    Json(req): Json<PasswordResetConfirm>,
+) -> Result<(), ApiError> {
+    if req.new_password.len() < 12 {
+        return Err(ApiError::BadRequest(
+            "password must be at least 12 characters".into(),
+        ));
+    }
+
+    let user_id = auth::redeem_password_reset_token(&state.pool, &req.token).await?;
+    let password_hash = auth::hash_password(&req.new_password)?;
+    users::set_password_hash(&state.pool, user_id, &password_hash).await?;
+    // A password reset should also sign out anyone using the old (possibly
+    // compromised) password -- same reasoning as deactivating a user.
+    auth::revoke_all_sessions(&state.pool, user_id).await?;
     Ok(())
 }

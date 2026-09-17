@@ -10,6 +10,8 @@ servcat-db.workspace = true
 tokio = { workspace = true, features = ["time"] }
 tracing.workspace = true
 chrono.workspace = true
+chrono-tz.workspace = true
 uuid.workspace = true
 thiserror.workspace = true
 async-trait.workspace = true
+lettre.workspace = true

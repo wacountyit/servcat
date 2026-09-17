@@ -43,6 +43,25 @@
 <p class="card">This request is waiting on an approver's decision.</p>
 {% endif %}
 
+{% if let Some(ticket) = ticket %}
+<div class="card">
+  <h2>Ticket</h2>
+  {% if ticket.dispatch_status.as_str() == "failed" %}
+    <p>This request could not be submitted to the ticketing system automatically.
+    Contact IT support to follow up.</p>
+    {% if let Some(err) = ticket_error %}<p class="hint">{{ err }}</p>{% endif %}
+  {% else if let Some(url) = ticket.external_ticket_url %}
+    <p><a href="{{ url }}" target="_blank" rel="noopener noreferrer">
+      {% if let Some(ext_id) = ticket.external_ticket_id %}{{ ext_id }}{% else %}View ticket{% endif %}
+    </a></p>
+  {% else if let Some(ext_id) = ticket.external_ticket_id %}
+    <p>Ticket reference: {{ ext_id }}</p>
+  {% else %}
+    <p>Submitting to the ticketing system&hellip;</p>
+  {% endif %}
+</div>
+{% endif %}
+
 {% if !answers.is_empty() %}
 <h2>Submitted answers</h2>
 <table>

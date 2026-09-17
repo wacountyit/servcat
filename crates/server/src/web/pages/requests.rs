@@ -7,8 +7,8 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
-use servcat_db::repositories::{catalog, workflow_definitions};
-use servcat_model::{InputType, QuestionOption, Role, StepKind, WorkflowInstance};
+use servcat_db::repositories::{catalog, tickets as tickets_repo, workflow_definitions};
+use servcat_model::{InputType, QuestionOption, Role, StepKind, Ticket, WorkflowInstance};
 use uuid::Uuid;
 
 use crate::{
@@ -62,6 +62,11 @@ struct RequestDetailTemplate {
     catalog_item_name: String,
     question: Option<CurrentQuestion>,
     answers: Vec<(String, String)>,
+    ticket: Option<Ticket>,
+    /// Only populated for staff (admin/agent) -- a requester sees that
+    /// dispatch failed but not the raw connector error, which can contain
+    /// internal details (auth failures, target-system URLs, etc).
+    ticket_error: Option<String>,
 }
 
 async fn show(
@@ -121,12 +126,21 @@ async fn show(
         })
         .unwrap_or_default();
 
+    let ticket = tickets_repo::get_by_instance_id(&state.pool, instance.id).await?;
+    let ticket_error = if is_staff {
+        ticket.as_ref().and_then(|t| t.last_error.clone())
+    } else {
+        None
+    };
+
     Ok(html(RequestDetailTemplate {
         layout,
         instance,
         catalog_item_name: item.name,
         question,
         answers,
+        ticket,
+        ticket_error,
     }))
 }
 

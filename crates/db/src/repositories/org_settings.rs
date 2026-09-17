@@ -2,8 +2,8 @@ use servcat_model::{OrgSettings, UpdateOrgSettings};
 
 use crate::{DbError, Pool};
 
-const SELECT: &str =
-    "SELECT app_name, logo_url, allow_local_signup, updated_at FROM org_settings WHERE id = 1";
+const SELECT: &str = "SELECT app_name, logo_url, allow_local_signup, timezone, updated_at \
+     FROM org_settings WHERE id = 1";
 
 /// Inserts the single settings row the first time the server starts against
 /// a fresh database (no-op once it exists) -- same bootstrap-once pattern as
@@ -37,11 +37,13 @@ pub async fn update(pool: &Pool, patch: &UpdateOrgSettings) -> Result<OrgSetting
     sqlx::query(
         "UPDATE org_settings SET \
             app_name = COALESCE(?, app_name), \
-            allow_local_signup = COALESCE(?, allow_local_signup) \
+            allow_local_signup = COALESCE(?, allow_local_signup), \
+            timezone = COALESCE(?, timezone) \
          WHERE id = 1",
     )
     .bind(&patch.app_name)
     .bind(patch.allow_local_signup)
+    .bind(&patch.timezone)
     .execute(pool)
     .await?;
 

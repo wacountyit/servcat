@@ -40,6 +40,13 @@ async fn update_settings(
     Json(patch): Json<UpdateOrgSettings>,
 ) -> Result<Json<OrgSettings>, ApiError> {
     auth_user.require_role(&[Role::Admin])?;
+    if let Some(tz) = &patch.timezone
+        && !crate::timezone::is_valid(tz)
+    {
+        return Err(ApiError::BadRequest(format!(
+            "'{tz}' is not a recognized IANA timezone name"
+        )));
+    }
     Ok(Json(org_settings::update(&state.pool, &patch).await?))
 }
 

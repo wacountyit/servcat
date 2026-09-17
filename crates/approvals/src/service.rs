@@ -1,11 +1,19 @@
 use std::sync::Arc;
 
 use chrono::{Duration as ChronoDuration, Utc};
-use servcat_db::{Pool, repositories::approvals as approvals_repo, repositories::users};
+use servcat_db::{
+    Pool,
+    repositories::{
+        approvals as approvals_repo, catalog, instances as instances_repo, org_settings, users,
+    },
+};
 use servcat_model::{ApprovalDecision, ApprovalStatus, ApproverResolution, PendingApproval, User};
 use uuid::Uuid;
 
-use crate::{ApprovalNotifier, ApprovalsError, resolution::resolve_approver_user_id};
+use crate::{
+    ApprovalNotifier, ApprovalsError, notifier::NewApprovalNotification,
+    resolution::resolve_approver_user_id,
+};
 
 /// Resolves `resolution` against `requester`, creates the `PendingApproval`
 /// row, and fires a (best-effort) notification. Does not touch the owning
@@ -34,7 +42,24 @@ pub async fn create_for_instance(
     .await?;
 
     if let Some(approver) = users::get_by_id(pool, approver_user_id).await? {
-        notifier.notify_new_approval(&approval, &approver).await;
+        let catalog_item_name = match instances_repo::get_by_id(pool, workflow_instance_id).await? {
+            Some(instance) => catalog::get_by_id(pool, instance.catalog_item_id)
+                .await?
+                .map(|item| item.name)
+                .unwrap_or_else(|| "(deleted service)".to_string()),
+            None => "(unknown request)".to_string(),
+        };
+        let org_timezone = org_settings::get(pool).await?.timezone;
+
+        notifier
+            .notify_new_approval(&NewApprovalNotification {
+                approval: &approval,
+                approver: &approver,
+                requester,
+                catalog_item_name: &catalog_item_name,
+                org_timezone: &org_timezone,
+            })
+            .await;
     }
 
     Ok(approval)
