@@ -15,8 +15,9 @@ ALTER TABLE service_catalog_items
     ADD COLUMN details_json    JSON         NULL AFTER summary,
     ADD COLUMN approval_label  VARCHAR(100) NULL AFTER details_json,
     ADD COLUMN target_value    INT          NULL AFTER approval_label,
-    ADD COLUMN target_unit     VARCHAR(20)  NULL AFTER target_value
-                                   CHECK (target_unit IS NULL OR target_unit IN
-                                       ('minutes', 'hours', 'business_days', 'calendar_days')),
+    ADD COLUMN target_unit     VARCHAR(20)  NULL AFTER target_value,
     ADD COLUMN sort_order      INT          NOT NULL DEFAULT 0 AFTER target_unit,
-    ADD CONSTRAINT uq_catalog_items_slug UNIQUE (slug);
+    ADD CONSTRAINT uq_catalog_items_slug UNIQUE (slug),
+    ADD CONSTRAINT chk_catalog_items_target_unit CHECK (
+        target_unit IS NULL OR target_unit IN ('minutes', 'hours', 'business_days', 'calendar_days')
+    );
