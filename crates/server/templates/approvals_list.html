@@ -4,7 +4,9 @@
 <h1>Approvals awaiting your decision</h1>
 
 {% if approvals.is_empty() %}
-<p class="empty-state">Nothing is waiting on you right now.</p>
+<div class="empty-state">
+  <p>Nothing is waiting on you right now.</p>
+</div>
 {% else %}
 {% for a in approvals %}
 <div class="card">

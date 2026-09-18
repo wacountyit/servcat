@@ -9,6 +9,13 @@
 // changes at all. The "Advanced: edit as JSON" textarea is that same JSON,
 // kept live in sync, with a one-way "Load JSON into builder" action to
 // bring hand edits back into the visual model.
+//
+// Steps render as an ordinary vertical list in normal document flow --
+// deliberately not an absolutely-positioned free-drag canvas. That means
+// the list's own height always contains its content correctly with no
+// manual sizing/overflow math, and a connector between two adjacent cards
+// is always a tiny, fixed-size straight line (never a path computed across
+// an arbitrary, unbounded distance).
 (function () {
   'use strict';
 
@@ -24,25 +31,18 @@
   var ROLES = ['requester', 'approver', 'agent', 'admin'];
   var END_OUTCOMES = ['completed', 'rejected', 'cancelled'];
   var REF_FIELDS = ['next', 'on_true', 'on_false', 'on_approve', 'on_reject'];
-  var NODE_WIDTH = 260;
-  var GRID_STEP_X = 300;
-  var GRID_STEP_Y = 220;
-  var GRID_COLS = 3;
 
   var steps = [];
   var entryStepId = null;
   var stepCounter = 0;
   var users = [];
-  var dragState = null;
 
-  var canvasEl, arrowsContentEl, arrowsSvg, errorEl, graphTextarea, usersSourceEl, fieldKeysDatalist;
+  var stepsListEl, errorEl, graphTextarea, usersSourceEl, fieldKeysDatalist;
 
   function main() {
-    canvasEl = document.getElementById('wf-canvas');
-    if (!canvasEl) return; // this page doesn't have the builder
+    stepsListEl = document.getElementById('wf-steps');
+    if (!stepsListEl) return; // this page doesn't have the builder
 
-    arrowsSvg = document.getElementById('wf-arrows');
-    arrowsContentEl = document.getElementById('wf-arrows-content');
     errorEl = document.getElementById('wf-builder-error');
     graphTextarea = document.getElementById('wf-graph-json');
     usersSourceEl = document.getElementById('wf-users-source');
@@ -62,34 +62,35 @@
     var form = document.getElementById('wf-form');
     if (form) form.addEventListener('submit', onSubmit);
 
-    canvasEl.addEventListener('change', onCanvasChange);
-    canvasEl.addEventListener('click', onCanvasClick);
-    canvasEl.addEventListener('mousedown', onCanvasMouseDown);
+    stepsListEl.addEventListener('change', onListChange);
+    stepsListEl.addEventListener('click', onListClick);
 
     var prefill = (graphTextarea.value || '').trim();
     var unparseablePrefill = null;
+    var loadErrorMessage = null;
     if (prefill) {
       try {
         hydrateFromGraph(JSON.parse(prefill));
       } catch (err) {
         loadStarterExample();
         unparseablePrefill = prefill;
-        showError(
+        loadErrorMessage =
           'Could not load the previously submitted graph JSON (' + err.message + ') into the visual builder -- ' +
           'it has been left as-is in "Advanced: edit as JSON" below so you can fix and reapply it. Showing a ' +
-          'blank builder for now.'
-        );
+          'blank builder for now.';
       }
     } else {
       loadStarterExample();
     }
 
+    // renderAll() re-syncs the JSON textarea from the (now-loaded) builder
+    // state and updates the live validation status -- both need to happen
+    // before restoring the unparseable text / the load-failure message, or
+    // they'd immediately get overwritten by it.
     renderAll();
-    // renderAll() just overwrote the textarea with the starter example's
-    // JSON -- restore the user's actual (unparseable) submission instead,
-    // or its content would silently vanish.
     if (unparseablePrefill !== null) {
       graphTextarea.value = unparseablePrefill;
+      showError(loadErrorMessage);
     }
   }
 
@@ -109,15 +110,11 @@
     q.input_type = 'text_area';
     q.required = true;
     q.next = 'end_ok';
-    q.x = 40;
-    q.y = 40;
 
     var e = newStep('end');
     e.id = 'end_ok';
     e.label = 'Done';
     e.outcome = 'completed';
-    e.x = 40 + GRID_STEP_X;
-    e.y = 40;
 
     steps = [q, e];
     entryStepId = 'ask_summary';
@@ -127,14 +124,12 @@
 
   function newStep(kind) {
     stepCounter += 1;
-    var pos = nextPosition(steps.length);
     return {
       _uid: 'n' + stepCounter,
+      _collapsed: false,
       id: kind + '_' + stepCounter,
       label: '',
       kind: kind,
-      x: pos.x,
-      y: pos.y,
       // question
       field_key: '',
       input_type: 'text',
@@ -162,19 +157,14 @@
     };
   }
 
-  function nextPosition(index) {
-    return {
-      x: 40 + (index % GRID_COLS) * GRID_STEP_X,
-      y: 40 + Math.floor(index / GRID_COLS) * GRID_STEP_Y,
-    };
-  }
-
   function addStep(kind) {
     var step = newStep(kind);
     steps.push(step);
     if (!entryStepId) entryStepId = step.id;
     clearError();
     renderAll();
+    var el = stepsListEl.querySelector('[data-uid="' + step._uid + '"]');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 
   function outgoingEdges(step) {
@@ -282,10 +272,6 @@
   }
 
   function buildConditionJson(step) {
-    if (!SIMPLE_CONDITION_OPS.indexOf) {
-      // (defensive no-op; Array.prototype.indexOf always exists in any
-      // browser this app otherwise supports -- kept simple deliberately)
-    }
     if (step._raw_condition && SIMPLE_CONDITION_OPS.indexOf(step.condition_op) === -1) {
       return step._raw_condition;
     }
@@ -363,9 +349,6 @@
           step.outcome = k.outcome || 'completed';
           break;
       }
-      var pos = nextPosition(i);
-      step.x = pos.x;
-      step.y = pos.y;
       newSteps.push(step);
     });
     steps = newSteps;
@@ -432,50 +415,82 @@
 
   function renderAll() {
     withFocusPreserved(function () {
-      canvasEl.querySelectorAll('.wf-node').forEach(function (el) { el.remove(); });
-      var fragment = document.createDocumentFragment();
-      steps.forEach(function (step) { fragment.appendChild(buildNodeElement(step)); });
-      canvasEl.appendChild(fragment);
+      stepsListEl.innerHTML = '';
+      if (!steps.length) {
+        var empty = document.createElement('p');
+        empty.className = 'wf-steps-empty hint';
+        empty.id = 'wf-steps-empty';
+        empty.textContent = 'No steps yet -- add one above to get started.';
+        stepsListEl.appendChild(empty);
+      } else {
+        steps.forEach(function (step, i) {
+          stepsListEl.appendChild(buildStepCard(step, i));
+          if (i < steps.length - 1) {
+            var edge = findConnectingEdge(step, steps[i + 1].id);
+            if (edge) stepsListEl.appendChild(buildConnector(edge));
+          }
+        });
+      }
     });
 
-    resizeCanvas();
-    redrawArrows();
     refreshFieldKeysDatalist();
     syncGraphTextarea();
+    renderValidationStatus();
   }
 
-  function resizeCanvas() {
-    var maxX = 900;
-    var maxY = 500;
-    steps.forEach(function (s) {
-      maxX = Math.max(maxX, s.x + NODE_WIDTH + 60);
-      maxY = Math.max(maxY, s.y + 260);
-    });
-    canvasEl.style.width = maxX + 'px';
-    canvasEl.style.height = maxY + 'px';
-    arrowsSvg.setAttribute('width', String(maxX));
-    arrowsSvg.setAttribute('height', String(maxY));
+  // The edge (if any) from `step` that leads directly into `nextId` -- used
+  // to decide whether a connector is drawn between two *adjacent* cards.
+  // A step's other edges (if it has more than one, or if it points
+  // somewhere further down/up the list) are still fully wired up via that
+  // step's own dropdowns; they're just not drawn as a line here.
+  function findConnectingEdge(step, nextId) {
+    var edges = outgoingEdges(step);
+    for (var i = 0; i < edges.length; i++) {
+      if (edges[i].to === nextId) return edges[i];
+    }
+    return null;
   }
 
-  function buildNodeElement(step) {
+  function buildConnector(edge) {
+    var wrap = document.createElement('div');
+    wrap.className = 'wf-connector' + (edge.color ? ' wf-connector-' + edge.color : '');
+    var markerId = 'wf-arrowhead' + (edge.color ? '-' + edge.color : '');
+    wrap.innerHTML =
+      '<svg width="16" height="26" viewBox="0 0 16 26" aria-hidden="true" focusable="false">' +
+      '<path d="M8,1 L8,18" class="wf-connector-line" fill="none" marker-end="url(#' + markerId + ')"></path>' +
+      '</svg>' +
+      (edge.label ? '<span>' + escapeHtml(edge.label) + '</span>' : '');
+    return wrap;
+  }
+
+  function buildStepCard(step, index) {
     var div = document.createElement('div');
-    div.className = 'wf-node wf-node-' + step.kind;
-    div.style.left = step.x + 'px';
-    div.style.top = step.y + 'px';
+    div.className = 'wf-step-card wf-step-' + step.kind + (step._collapsed ? ' wf-step-collapsed' : '');
     div.setAttribute('data-uid', step._uid);
 
     var isEntry = !!step.id && step.id === entryStepId;
+    var isFirst = index === 0;
+    var isLast = index === steps.length - 1;
+
     div.innerHTML =
-      '<div class="wf-node-header">' +
-      '<button type="button" class="wf-entry-star' + (isEntry ? ' is-entry' : '') + '" data-action="set-entry" title="' +
-      (isEntry ? 'Entry step' : 'Set as entry step') + '">' + (isEntry ? '★' : '☆') + '</button>' +
-      '<span class="wf-node-kind">' + escapeHtml(STEP_KIND_LABELS[step.kind]) + '</span>' +
-      '<button type="button" class="wf-node-delete" data-action="delete-step" title="Delete step">✕</button>' +
+      '<div class="wf-step-header">' +
+      '<button type="button" class="wf-icon-btn" data-action="toggle-collapse" ' +
+      'aria-expanded="' + (!step._collapsed) + '" title="' + (step._collapsed ? 'Expand step' : 'Collapse step') + '">' +
+      (step._collapsed ? '▸' : '▾') + '</button>' +
+      '<span class="wf-step-badge">' + escapeHtml(STEP_KIND_LABELS[step.kind]) + '</span>' +
+      '<input type="text" data-field="label" value="' + escapeHtml(step.label) +
+      '" placeholder="Step label" aria-label="Step label">' +
+      '<button type="button" class="wf-icon-btn" data-action="move-up" title="Move up"' +
+      (isFirst ? ' disabled' : '') + '>↑</button>' +
+      '<button type="button" class="wf-icon-btn" data-action="move-down" title="Move down"' +
+      (isLast ? ' disabled' : '') + '>↓</button>' +
+      '<button type="button" class="wf-icon-btn wf-entry-star' + (isEntry ? ' is-entry' : '') + '" ' +
+      'data-action="set-entry" title="' + (isEntry ? 'Entry step' : 'Set as entry step') + '">' +
+      (isEntry ? '★' : '☆') + '</button>' +
+      '<button type="button" class="wf-icon-btn wf-step-delete" data-action="delete-step" title="Delete step">✕</button>' +
       '</div>' +
-      '<div class="wf-node-body">' +
-      '<label class="wf-field">Step ID<input type="text" data-field="id" value="' + escapeHtml(step.id) + '"></label>' +
-      '<label class="wf-field">Label<input type="text" data-field="label" value="' + escapeHtml(step.label) +
-      '" placeholder="Shown to the requester"></label>' +
+      '<div class="wf-step-body">' +
+      '<label class="wf-form-group">Step ID<input type="text" data-field="id" value="' + escapeHtml(step.id) + '"></label>' +
       buildKindBody(step) +
       '</div>';
     return div;
@@ -503,10 +518,10 @@
       return '<option value="' + t + '"' + (t === step.input_type ? ' selected' : '') + '>' + t + '</option>';
     }).join('');
     var html =
-      '<label class="wf-field">Field key<input type="text" data-field="field_key" value="' +
+      '<label class="wf-form-group">Field key<input type="text" data-field="field_key" value="' +
       escapeHtml(step.field_key) + '" placeholder="e.g. summary"></label>' +
-      '<label class="wf-field">Input type<select data-field="input_type">' + options + '</select></label>' +
-      '<label class="wf-field wf-field-row"><input type="checkbox" data-field="required"' +
+      '<label class="wf-form-group">Input type<select data-field="input_type">' + options + '</select></label>' +
+      '<label class="wf-form-group wf-form-row"><input type="checkbox" data-field="required"' +
       (step.required ? ' checked' : '') + '> Required</label>';
     if (isChoiceInput(step.input_type)) {
       html += buildOptionsEditor(step);
@@ -520,9 +535,9 @@
       return (
         '<div class="wf-option-row">' +
         '<input type="text" data-field="option_value" data-index="' + i + '" value="' + escapeHtml(opt.value) +
-        '" placeholder="value">' +
+        '" placeholder="value" aria-label="Option value">' +
         '<input type="text" data-field="option_label" data-index="' + i + '" value="' + escapeHtml(opt.label) +
-        '" placeholder="label">' +
+        '" placeholder="label" aria-label="Option label">' +
         '<button type="button" class="link-button" data-action="remove-option" data-index="' + i + '">Remove</button>' +
         '</div>'
       );
@@ -545,9 +560,9 @@
     var needsValue = step.condition_op !== 'exists';
     var isIn = step.condition_op === 'in';
     var html =
-      '<label class="wf-field">Field key<input type="text" data-field="condition_field_key" value="' +
+      '<label class="wf-form-group">Field key<input type="text" data-field="condition_field_key" value="' +
       escapeHtml(step.condition_field_key) + '" list="wf-field-keys"></label>' +
-      '<label class="wf-field">Operator<select data-field="condition_op">' +
+      '<label class="wf-form-group">Operator<select data-field="condition_op">' +
       opt('equals', step.condition_op, 'equals') +
       opt('not_equals', step.condition_op, 'not equals') +
       opt('exists', step.condition_op, 'has an answer') +
@@ -555,12 +570,12 @@
       '</select></label>';
     if (needsValue) {
       html +=
-        '<label class="wf-field">Value type<select data-field="condition_value_type">' +
+        '<label class="wf-form-group">Value type<select data-field="condition_value_type">' +
         opt('string', step.condition_value_type, 'text') +
         opt('number', step.condition_value_type, 'number') +
         opt('boolean', step.condition_value_type, 'true/false') +
         '</select></label>' +
-        '<label class="wf-field">' + (isIn ? 'Values (comma-separated)' : 'Value') +
+        '<label class="wf-form-group">' + (isIn ? 'Values (comma-separated)' : 'Value') +
         buildConditionValueInput(step, isIn) + '</label>';
     }
     html += buildRefSelect(step, 'on_true', 'If true') + buildRefSelect(step, 'on_false', 'If false');
@@ -584,30 +599,30 @@
 
   function buildApprovalBody(step) {
     var html =
-      '<label class="wf-field">Approver<select data-field="approver_type">' +
+      '<label class="wf-form-group">Approver<select data-field="approver_type">' +
       opt('manager_of_requester', step.approver_type, "Requester's manager") +
       opt('role_in_department', step.approver_type, "Anyone with a role, in the requester's department") +
       opt('static', step.approver_type, 'A specific person') +
       '</select></label>';
     if (step.approver_type === 'role_in_department') {
-      html += '<label class="wf-field">Role<select data-field="approver_role">' +
+      html += '<label class="wf-form-group">Role<select data-field="approver_role">' +
         ROLES.map(function (r) { return opt(r, step.approver_role, r); }).join('') +
         '</select></label>';
     }
     if (step.approver_type === 'static') {
-      html += '<label class="wf-field">Person<select data-field="approver_user_id">' +
+      html += '<label class="wf-form-group">Person<select data-field="approver_user_id">' +
         '<option value="">-- choose --</option>' +
         users.map(function (u) { return opt(u.value, step.approver_user_id, u.text); }).join('') +
         '</select></label>';
     }
-    html += '<label class="wf-field">Auto-reject after (seconds, optional)' +
+    html += '<label class="wf-form-group">Auto-reject after (seconds, optional)' +
       '<input type="number" min="0" data-field="timeout_seconds" value="' + escapeHtml(step.timeout_seconds) + '"></label>';
     html += buildRefSelect(step, 'on_approve', 'If approved') + buildRefSelect(step, 'on_reject', 'If rejected');
     return html;
   }
 
   function buildEndBody(step) {
-    return '<label class="wf-field">Outcome<select data-field="outcome">' +
+    return '<label class="wf-form-group">Outcome<select data-field="outcome">' +
       END_OUTCOMES.map(function (o) { return opt(o, step.outcome, o); }).join('') +
       '</select></label>';
   }
@@ -624,7 +639,7 @@
       return '<option value="' + escapeHtml(s.id) + '"' + (s.id === current ? ' selected' : '') + '>' +
         escapeHtml(text) + '</option>';
     }).join('');
-    return '<label class="wf-field">' + escapeHtml(labelText) + '<select data-field="' + fieldName + '">' +
+    return '<label class="wf-form-group">' + escapeHtml(labelText) + '<select data-field="' + fieldName + '">' +
       options + '</select></label>';
   }
 
@@ -640,46 +655,6 @@
     }).join('');
   }
 
-  function redrawArrows() {
-    while (arrowsContentEl.firstChild) arrowsContentEl.removeChild(arrowsContentEl.firstChild);
-    steps.forEach(function (step) {
-      var fromEl = canvasEl.querySelector('[data-uid="' + step._uid + '"]');
-      if (!fromEl) return;
-      var from = { x: step.x, y: step.y, w: fromEl.offsetWidth, h: fromEl.offsetHeight };
-      outgoingEdges(step).forEach(function (edge) {
-        if (!edge.to) return;
-        var target = steps.find(function (s) { return s.id === edge.to; });
-        if (!target) return;
-        var toEl = canvasEl.querySelector('[data-uid="' + target._uid + '"]');
-        if (!toEl) return;
-        var to = { x: target.x, y: target.y, w: toEl.offsetWidth, h: toEl.offsetHeight };
-        drawArrow(from, to, edge.label, edge.color);
-      });
-    });
-  }
-
-  function drawArrow(from, to, label, color) {
-    var x1 = from.x + from.w / 2;
-    var y1 = from.y + from.h;
-    var x2 = to.x + to.w / 2;
-    var y2 = to.y;
-    var midY = (y1 + y2) / 2;
-    var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    path.setAttribute('d', 'M ' + x1 + ' ' + y1 + ' C ' + x1 + ' ' + midY + ', ' + x2 + ' ' + midY + ', ' + x2 + ' ' + y2);
-    path.setAttribute('class', 'wf-arrow' + (color ? ' wf-arrow-' + color : ''));
-    path.setAttribute('marker-end', 'url(#wf-arrowhead' + (color ? '-' + color : '') + ')');
-    arrowsContentEl.appendChild(path);
-
-    if (label) {
-      var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', String((x1 + x2) / 2 + 6));
-      text.setAttribute('y', String(midY));
-      text.setAttribute('class', 'wf-arrow-label' + (color ? ' wf-arrow-label-' + color : ''));
-      text.textContent = label;
-      arrowsContentEl.appendChild(text);
-    }
-  }
-
   function syncGraphTextarea() {
     graphTextarea.value = JSON.stringify(buildGraphObject(), null, 2);
   }
@@ -690,13 +665,13 @@
     return steps.find(function (s) { return s._uid === uid; });
   }
 
-  function onCanvasChange(event) {
+  function onListChange(event) {
     var target = event.target;
     var field = target.getAttribute('data-field');
     if (!field) return;
-    var nodeEl = target.closest('[data-uid]');
-    if (!nodeEl) return;
-    var step = findStepByUid(nodeEl.getAttribute('data-uid'));
+    var cardEl = target.closest('[data-uid]');
+    if (!cardEl) return;
+    var step = findStepByUid(cardEl.getAttribute('data-uid'));
     if (!step) return;
 
     if (field === 'id') {
@@ -734,14 +709,16 @@
     step.id = newId;
   }
 
-  function onCanvasClick(event) {
+  function onListClick(event) {
     var btn = event.target.closest('[data-action]');
-    if (!btn) return;
+    if (!btn || btn.disabled) return;
     var action = btn.getAttribute('data-action');
-    var nodeEl = btn.closest('[data-uid]');
-    var step = nodeEl && findStepByUid(nodeEl.getAttribute('data-uid'));
+    var cardEl = btn.closest('[data-uid]');
+    var step = cardEl && findStepByUid(cardEl.getAttribute('data-uid'));
+    if (!step) return;
+    var index = steps.indexOf(step);
 
-    if (action === 'delete-step' && step) {
+    if (action === 'delete-step') {
       var refs = findReferencingStepIds(step.id);
       if (refs.length &&
         !window.confirm(
@@ -753,12 +730,18 @@
       }
       steps = steps.filter(function (s) { return s !== step; });
       if (entryStepId === step.id) entryStepId = steps.length ? steps[0].id : null;
-    } else if (action === 'set-entry' && step) {
+    } else if (action === 'set-entry') {
       entryStepId = step.id;
-    } else if (action === 'add-option' && step) {
+    } else if (action === 'add-option') {
       step.options.push({ value: '', label: '' });
-    } else if (action === 'remove-option' && step) {
+    } else if (action === 'remove-option') {
       step.options.splice(Number(btn.getAttribute('data-index')), 1);
+    } else if (action === 'toggle-collapse') {
+      step._collapsed = !step._collapsed;
+    } else if (action === 'move-up' && index > 0) {
+      steps.splice(index - 1, 0, steps.splice(index, 1)[0]);
+    } else if (action === 'move-down' && index < steps.length - 1) {
+      steps.splice(index + 1, 0, steps.splice(index, 1)[0]);
     } else {
       return;
     }
@@ -766,60 +749,30 @@
     renderAll();
   }
 
-  function onCanvasMouseDown(event) {
-    var header = event.target.closest('.wf-node-header');
-    if (!header || event.target.closest('button')) return;
-    var nodeEl = header.closest('[data-uid]');
-    var step = nodeEl && findStepByUid(nodeEl.getAttribute('data-uid'));
-    if (!step) return;
-
-    event.preventDefault();
-    var canvasRect = canvasEl.getBoundingClientRect();
-    dragState = {
-      step: step,
-      el: nodeEl,
-      offsetX: event.clientX - canvasRect.left - step.x,
-      offsetY: event.clientY - canvasRect.top - step.y,
-    };
-    document.addEventListener('mousemove', onDragMove);
-    document.addEventListener('mouseup', onDragEnd);
-  }
-
-  function onDragMove(event) {
-    if (!dragState) return;
-    var canvasRect = canvasEl.getBoundingClientRect();
-    var x = Math.max(0, event.clientX - canvasRect.left - dragState.offsetX);
-    var y = Math.max(0, event.clientY - canvasRect.top - dragState.offsetY);
-    dragState.step.x = x;
-    dragState.step.y = y;
-    dragState.el.style.left = x + 'px';
-    dragState.el.style.top = y + 'px';
-    resizeCanvas();
-    redrawArrows();
-  }
-
-  function onDragEnd() {
-    dragState = null;
-    document.removeEventListener('mousemove', onDragMove);
-    document.removeEventListener('mouseup', onDragEnd);
-    syncGraphTextarea();
-  }
-
+  // Keeps keyboard focus on "the same control" across a full re-render --
+  // otherwise every click/change (including repeatedly pressing a
+  // Move up/down or Collapse button) would drop focus back to the
+  // document body, forcing a keyboard user to tab back in each time.
+  // If the step itself was just deleted, there's nothing sensible to
+  // restore focus to, so it's simply left wherever the browser puts it.
   function withFocusPreserved(fn) {
     var active = document.activeElement;
     var selector = null;
-    if (active && canvasEl.contains(active)) {
-      var nodeEl = active.closest('[data-uid]');
+    if (active && stepsListEl.contains(active)) {
+      var cardEl = active.closest('[data-uid]');
       var field = active.getAttribute('data-field');
+      var action = active.getAttribute('data-action');
       var index = active.getAttribute('data-index');
-      if (nodeEl && field) {
-        selector = '[data-uid="' + nodeEl.getAttribute('data-uid') + '"] [data-field="' + field + '"]' +
+      if (cardEl && field) {
+        selector = '[data-uid="' + cardEl.getAttribute('data-uid') + '"] [data-field="' + field + '"]' +
           (index !== null ? '[data-index="' + index + '"]' : '');
+      } else if (cardEl && action) {
+        selector = '[data-uid="' + cardEl.getAttribute('data-uid') + '"] [data-action="' + action + '"]';
       }
     }
     fn();
     if (selector) {
-      var el = canvasEl.querySelector(selector);
+      var el = stepsListEl.querySelector(selector);
       if (el) el.focus();
     }
   }
@@ -833,6 +786,9 @@
     }
     if (!entryStepId || !steps.some(function (s) { return s.id === entryStepId; })) {
       errors.push('Mark one step as the entry step (click the star in its header).');
+    }
+    if (!steps.some(function (s) { return s.kind === 'end'; })) {
+      errors.push('Add at least one End step, or a request could never actually finish.');
     }
     var seen = {};
     var ids = steps.map(function (s) { return s.id; });
@@ -865,12 +821,29 @@
     return errors.filter(function (v, i, arr) { return arr.indexOf(v) === i; });
   }
 
+  // Keeps the status box live-updated with the current validation state on
+  // every render, rather than only ever checking at submit time -- so a
+  // problem is visible (and fixable) the moment it's introduced instead of
+  // failing silently until the form is submitted. Shown as a mild warning
+  // (not the harsher error style) since mid-construction a graph is
+  // *expected* to be temporarily incomplete -- e.g. right after adding a
+  // step and before wiring it up -- and a red alert on every keystroke
+  // would be more naggy than helpful.
+  function renderValidationStatus() {
+    var errors = validate();
+    if (errors.length) {
+      showStatus(errors.join(' '), 'warning');
+    } else {
+      clearError();
+    }
+  }
+
   function onSubmit(event) {
     var errors = validate();
     if (errors.length) {
       event.preventDefault();
       showError(errors.join(' '));
-      canvasEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
     }
     clearError();
@@ -878,8 +851,14 @@
   }
 
   function showError(message) {
+    showStatus(message, 'error');
+  }
+
+  function showStatus(message, kind) {
     errorEl.textContent = message;
     errorEl.hidden = false;
+    errorEl.classList.remove('alert-error', 'alert-warning');
+    errorEl.classList.add(kind === 'warning' ? 'alert-warning' : 'alert-error');
   }
 
   function clearError() {

@@ -11,6 +11,9 @@
 <table>
   <thead><tr><th>Name</th><th>Version</th><th>Target</th><th>Status</th><th></th></tr></thead>
   <tbody>
+    {% if definitions.is_empty() %}
+    <tr><td colspan="5" class="hint">No workflows yet. Create one below.</td></tr>
+    {% endif %}
     {% for def in definitions %}
     <tr>
       <td>{{ def.name }}</td>
@@ -43,9 +46,9 @@
 
 <div class="card">
   <form method="post" action="/admin/workflows" class="stacked-form" id="wf-form">
-    <label>Name <input type="text" name="name" id="wf-name" value="{{ prefill_name }}" required></label>
-    <label>
-      Target system (for the final <code>SubmitTicket</code> step, if any)
+    <label class="wf-form-group">Name <input type="text" name="name" id="wf-name" value="{{ prefill_name }}" required></label>
+    <label class="wf-form-group">
+      Target system
       <select id="wf-target-system" name="target_system">
         <option value="" {% if prefill_target_system == "" %}selected{% endif %}>(none)</option>
         <option value="jira" {% if prefill_target_system == "jira" %}selected{% endif %}>jira</option>
@@ -54,6 +57,7 @@
         <option value="webhook" {% if prefill_target_system == "webhook" %}selected{% endif %}>webhook</option>
       </select>
     </label>
+    <p class="hint">Only used for the final <code>SubmitTicket</code> step, if this workflow has one.</p>
 
     <div>
       <div class="wf-toolbar">
@@ -64,25 +68,15 @@
         <button type="button" class="secondary" data-add-step="submit_ticket">+ Submit ticket</button>
         <button type="button" class="secondary" data-add-step="end">+ End</button>
       </div>
-      <p id="wf-builder-error" class="alert alert-error" hidden></p>
-      <div class="wf-canvas-viewport">
-        <div class="wf-canvas" id="wf-canvas">
-          <svg id="wf-arrows">
-            <defs>
-              <marker id="wf-arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                <path d="M0,0 L10,5 L0,10 z" class="wf-arrowhead"></path>
-              </marker>
-              <marker id="wf-arrowhead-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                <path d="M0,0 L10,5 L0,10 z" class="wf-arrowhead-green"></path>
-              </marker>
-              <marker id="wf-arrowhead-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
-                <path d="M0,0 L10,5 L0,10 z" class="wf-arrowhead-red"></path>
-              </marker>
-            </defs>
-            <g id="wf-arrows-content"></g>
-          </svg>
-        </div>
-      </div>
+      <p class="hint wf-builder-hint">
+        Steps run top to bottom starting from the entry step (the &#9733;).
+        A connecting arrow is drawn between two steps only when the one
+        above leads directly into the one below it -- everything else is
+        still wired up correctly (check each step's dropdowns), just not
+        drawn as a line here. Use the up/down arrows to reorder steps.
+      </p>
+      <p id="wf-builder-error" class="alert" hidden role="alert"></p>
+      <div class="wf-steps" id="wf-steps"></div>
       <datalist id="wf-field-keys"></datalist>
     </div>
 
@@ -110,6 +104,22 @@
     <button type="submit" class="primary">Create workflow</button>
   </form>
 </div>
+
+<!-- Zero-size, shared arrowhead markers referenced by the small per-gap
+     connector SVGs the builder generates between adjacent step cards. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <marker id="wf-arrowhead" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="wf-arrowhead"></path>
+    </marker>
+    <marker id="wf-arrowhead-green" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="wf-arrowhead-green"></path>
+    </marker>
+    <marker id="wf-arrowhead-red" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" class="wf-arrowhead-red"></path>
+    </marker>
+  </defs>
+</svg>
 
 <select id="wf-users-source" hidden>
   {% for u in users %}

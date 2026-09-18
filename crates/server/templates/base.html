@@ -9,21 +9,23 @@
 <body>
   {% block body %}
   <header class="topbar">
-    <a class="brand" href="/">
-      {% if let Some(logo) = layout.logo_url %}<img src="{{ logo }}" alt="" class="brand-logo">{% endif %}
-      <span>{{ layout.app_name }}</span>
-    </a>
-    <nav class="nav">
-      <a href="/catalog" class="{% if layout.active_nav == "catalog" %}active{% endif %}">Catalog</a>
-      <a href="/requests" class="{% if layout.active_nav == "requests" %}active{% endif %}">My Requests</a>
-      <a href="/approvals" class="{% if layout.active_nav == "approvals" %}active{% endif %}">Approvals</a>
-      {% if layout.is_admin %}
-      <a href="/admin/users" class="{% if layout.active_nav == "admin" %}active{% endif %}">Admin</a>
-      {% endif %}
-    </nav>
-    <div class="account">
-      <span class="user">{{ layout.user_display_name }} <small>({{ layout.user_role_label }})</small></span>
-      <form method="post" action="/logout"><button type="submit" class="link-button">Sign out</button></form>
+    <div class="topbar-inner">
+      <a class="brand" href="/">
+        {% if let Some(logo) = layout.logo_url %}<img src="{{ logo }}" alt="" class="brand-logo">{% endif %}
+        <span>{{ layout.app_name }}</span>
+      </a>
+      <nav class="nav">
+        <a href="/catalog" class="{% if layout.active_nav == "catalog" %}active{% endif %}">Catalog</a>
+        <a href="/requests" class="{% if layout.active_nav == "requests" %}active{% endif %}">My Requests</a>
+        <a href="/approvals" class="{% if layout.active_nav == "approvals" %}active{% endif %}">Approvals</a>
+        {% if layout.is_admin %}
+        <a href="/admin/users" class="{% if layout.active_nav == "admin" %}active{% endif %}">Admin</a>
+        {% endif %}
+      </nav>
+      <div class="account">
+        <span class="user">{{ layout.user_display_name }} <small>({{ layout.user_role_label }})</small></span>
+        <form method="post" action="/logout"><button type="submit" class="link-button">Sign out</button></form>
+      </div>
     </div>
   </header>
   <main class="content">

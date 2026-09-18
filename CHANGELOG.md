@@ -99,6 +99,39 @@ not cut a `0.1.0` release yet, so everything so far is under "Unreleased."
 
 ### Fixed
 
+- The workflow graph builder's step cards were absolutely positioned on a
+  fixed-height canvas, so they could overflow their container and overlap
+  the "Advanced: edit as JSON" section and the submit button, and its
+  connector lines were bezier curves drawn across arbitrary, unbounded
+  distances -- a shape that renders as a large filled blob if `fill: none`
+  ever fails to apply for any reason (a CSS class not matching, a stylesheet
+  load race, etc.), rather than degrading harmlessly. Replaced the canvas
+  with an ordinary vertical list of collapsible, reorderable step cards in
+  normal document flow (so the container always sizes to its content by
+  construction) connected by tiny, fixed-size straight-line connectors
+  (geometrically incapable of enclosing a visible area even if unstyled).
+  Also added: move up/down per step, a live (not just at-submit) validation
+  status covering entry point / dangling references / duplicate ids / at
+  least one End step, and consistent label-above-control spacing throughout
+  the builder's fields.
+- The top nav's contents spanned the full viewport width while page content
+  was capped at a much narrower 960px, so on a wide/high-resolution display
+  the nav and the page looked visually disconnected. Both now share a
+  1160px max-width container, and the base font size is 16px (was 15px).
+- The admin sub-nav (Users/Departments/Catalog/Workflows/Settings/Audit
+  log) was plain underlined links with no strong active-state affordance;
+  restyled as folder-style tabs matching the top nav's visual language.
+- Catalog/My Requests/Approvals empty states were a single centered line of
+  text with no consistent container; now a bordered, padded panel, with a
+  "Manage catalog items" button for admins on an empty Catalog and a
+  "Browse the catalog" button on an empty My Requests.
+- No focus-visible styling was defined for any interactive element (links,
+  buttons, form controls), relying entirely on inconsistent browser
+  defaults that are easy to lose against this app's custom-styled
+  buttons/inputs. Added a uniform `:focus-visible` outline + ring.
+- The workflow definitions table showed only a header row with no
+  workflows yet, with no indication that this was expected. Added an
+  explicit "No workflows yet" row.
 - The requester-facing `/requests/{id}` page never surfaced the resulting
   ticket once a `SubmitTicket` step dispatched successfully (or failed),
   even though `tickets.external_ticket_id`/`external_ticket_url` were

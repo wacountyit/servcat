@@ -4,7 +4,12 @@
 <h1>Service catalog</h1>
 
 {% if items.is_empty() %}
-<p class="empty-state">Nothing is available to request yet.</p>
+<div class="empty-state">
+  <p>Nothing is available to request yet.</p>
+  {% if layout.is_admin %}
+  <a href="/admin/catalog" class="primary">Manage catalog items</a>
+  {% endif %}
+</div>
 {% else %}
 <div class="card-grid">
   {% for item in items %}

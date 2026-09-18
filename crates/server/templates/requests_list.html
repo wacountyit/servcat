@@ -4,7 +4,10 @@
 <h1>My requests</h1>
 
 {% if requests.is_empty() %}
-<p class="empty-state">You haven't submitted any requests yet. <a href="/catalog">Browse the catalog</a>.</p>
+<div class="empty-state">
+  <p>You haven't submitted any requests yet.</p>
+  <a href="/catalog" class="primary">Browse the catalog</a>
+</div>
 {% else %}
 <table>
   <thead><tr><th>Submitted</th><th>Status</th><th></th></tr></thead>
