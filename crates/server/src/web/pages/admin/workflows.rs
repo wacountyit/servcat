@@ -8,9 +8,9 @@ use axum::{
     routing::{get, post},
 };
 use serde::Deserialize;
-use servcat_db::repositories::workflow_definitions;
+use servcat_db::repositories::{users, workflow_definitions};
 use servcat_model::{
-    FieldMapping, NewWorkflowDefinition, TargetSystem, WorkflowDefinition, WorkflowGraph,
+    FieldMapping, NewWorkflowDefinition, TargetSystem, User, WorkflowDefinition, WorkflowGraph,
 };
 
 use crate::{
@@ -38,18 +38,36 @@ struct WorkflowsTemplate {
     layout: Layout,
     admin_section: &'static str,
     definitions: Vec<WorkflowDefinition>,
+    /// For the visual builder's "specific person" approver picker
+    /// (`ApproverResolution::Static`) -- active users only, same set an
+    /// admin could otherwise only reference by pasting a raw user id.
+    users: Vec<User>,
     error: Option<String>,
+    /// Re-populates the builder with what was actually submitted after a
+    /// validation error, rather than losing it -- empty on a fresh page
+    /// load, in which case the builder's own JS falls back to a small
+    /// built-in starter graph instead of an empty canvas.
+    prefill_name: String,
+    prefill_target_system: String,
+    prefill_graph_json: String,
+    prefill_field_mapping_json: String,
 }
 
 async fn list(State(state): State<AppState>, WebUser(user): WebUser) -> Result<Response, WebError> {
     require_admin(&user)?;
     let layout = Layout::load(&state, &user, "admin").await?;
     let definitions = workflow_definitions::list(&state.pool, false).await?;
+    let users = users::list(&state.pool, false).await?;
     Ok(html(WorkflowsTemplate {
         layout,
         admin_section: "workflows",
         definitions,
+        users,
         error: None,
+        prefill_name: String::new(),
+        prefill_target_system: String::new(),
+        prefill_graph_json: String::new(),
+        prefill_field_mapping_json: String::new(),
     }))
 }
 
@@ -70,7 +88,9 @@ async fn create(
 
     let graph: WorkflowGraph = match serde_json::from_str(&form.graph_json) {
         Ok(g) => g,
-        Err(err) => return workflow_form_error(&state, &user, format!("graph JSON: {err}")).await,
+        Err(err) => {
+            return workflow_form_error(&state, &user, format!("graph JSON: {err}"), &form).await;
+        }
     };
     let field_mapping = if form.field_mapping_json.trim().is_empty() {
         None
@@ -78,8 +98,13 @@ async fn create(
         match serde_json::from_str::<HashMap<String, String>>(&form.field_mapping_json) {
             Ok(map) => Some(FieldMapping(map)),
             Err(err) => {
-                return workflow_form_error(&state, &user, format!("field mapping JSON: {err}"))
-                    .await;
+                return workflow_form_error(
+                    &state,
+                    &user,
+                    format!("field mapping JSON: {err}"),
+                    &form,
+                )
+                .await;
             }
         }
     };
@@ -88,7 +113,7 @@ async fn create(
     } else {
         match form.target_system.parse::<TargetSystem>() {
             Ok(t) => Some(t),
-            Err(err) => return workflow_form_error(&state, &user, err).await,
+            Err(err) => return workflow_form_error(&state, &user, err, &form).await,
         }
     };
 
@@ -107,18 +132,28 @@ async fn create(
     Ok(Redirect::to("/admin/workflows").into_response())
 }
 
+/// Re-renders the page with `error` shown and the builder re-populated from
+/// exactly what was submitted, so a validation failure doesn't discard
+/// several minutes of visually building out a graph.
 async fn workflow_form_error(
     state: &AppState,
-    user: &servcat_model::User,
+    user: &User,
     error: String,
+    form: &CreateWorkflowForm,
 ) -> Result<Response, WebError> {
     let layout = Layout::load(state, user, "admin").await?;
     let definitions = workflow_definitions::list(&state.pool, false).await?;
+    let users = users::list(&state.pool, false).await?;
     Ok(html(WorkflowsTemplate {
         layout,
         admin_section: "workflows",
         definitions,
+        users,
         error: Some(error),
+        prefill_name: form.name.clone(),
+        prefill_target_system: form.target_system.clone(),
+        prefill_graph_json: form.graph_json.clone(),
+        prefill_field_mapping_json: form.field_mapping_json.clone(),
     }))
 }
 

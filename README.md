@@ -282,9 +282,16 @@ Pages, by role:
 - **Admin** (`/admin/users`, `/admin/departments`, `/admin/catalog`,
   `/admin/workflows`, `/admin/settings`, `/admin/audit-log`): user/
   department/catalog management, org branding/signup toggle, workflow
-  definitions, and a paginated, read-only view of `audit_log`. Authoring a
-  `WorkflowGraph` is still done as JSON in a textarea today -- there's no
-  drag-and-drop graph builder yet.
+  definitions, and a paginated, read-only view of `audit_log`.
+  `/admin/workflows`'s "Create a workflow definition" section is a
+  drag-and-drop graph builder (`crates/server/static/workflow_builder.js`,
+  vanilla JS, no build step, matching the rest of this project) --
+  add/wire/drag `Question`/`Branch`/`WaitForApproval`/`SubmitTicket`/`End`
+  step nodes and it stays in sync with the same `graph_json` the form
+  posts. Nested AND/OR/NOT branch conditions aren't editable visually
+  (round-trip preserved, just not buildable from scratch in the UI) --
+  use "Advanced: edit as JSON" under the builder for those. Field mapping
+  has no visual editor at all, only that same JSON textarea.
 
 Since AD-group-to-role mapping isn't implemented, a user's `role` (and
 therefore which admin pages they can reach) is a plain column set by another

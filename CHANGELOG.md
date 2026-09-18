@@ -84,6 +84,18 @@ not cut a `0.1.0` release yet, so everything so far is under "Unreleased."
   new `org_settings.timezone` setting. `audit_log` itself was already
   populated (user create/update/deactivate) but had no way to read it
   back short of querying the database directly.
+- Visual drag-and-drop workflow graph builder for `/admin/workflows`'s
+  "Create a workflow definition" form (`crates/server/static/
+  workflow_builder.js`), replacing the hand-typed JSON textarea as the
+  primary way to author a `WorkflowGraph`. Add/wire/drag
+  `Question`/`Branch`/`WaitForApproval`/`SubmitTicket`/`End` step nodes;
+  the builder serializes to the exact same `graph_json` the form always
+  posted, so no server-side change was needed for the create path itself.
+  An "Advanced: edit as JSON" section stays live-synced with the builder
+  for cases it doesn't cover visually (nested AND/OR/NOT conditions are
+  round-tripped losslessly but not buildable from scratch in the UI), and
+  a validation error now re-populates the builder with what was actually
+  submitted instead of discarding it.
 
 ### Fixed
 

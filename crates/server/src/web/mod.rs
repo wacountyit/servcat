@@ -19,6 +19,7 @@ use axum::{
 use crate::state::AppState;
 
 const STYLE_CSS: &str = include_str!("../../static/style.css");
+const WORKFLOW_BUILDER_JS: &str = include_str!("../../static/workflow_builder.js");
 
 pub fn routes(state: AppState) -> Router<AppState> {
     let protected = Router::new()
@@ -34,6 +35,7 @@ pub fn routes(state: AppState) -> Router<AppState> {
 
     Router::new()
         .route("/static/style.css", get(style_css))
+        .route("/static/workflow_builder.js", get(workflow_builder_js))
         .merge(pages::auth::routes())
         .merge(protected)
 }
@@ -42,6 +44,14 @@ async fn style_css() -> Response {
     (
         [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
         STYLE_CSS,
+    )
+        .into_response()
+}
+
+async fn workflow_builder_js() -> Response {
+    (
+        [(header::CONTENT_TYPE, "text/javascript; charset=utf-8")],
+        WORKFLOW_BUILDER_JS,
     )
         .into_response()
 }

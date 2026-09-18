@@ -35,56 +35,87 @@
 
 <h2>Create a workflow definition</h2>
 <p class="hint">
-  There's no visual graph builder yet -- author the step graph as JSON directly. See
-  <code>ARCHITECTURE.md</code> for the full shape (<code>Question</code>, <code>Branch</code>,
-  <code>WaitForApproval</code>, <code>SubmitTicket</code> and <code>End</code> steps).
+  Add steps below, wire up where each one leads, and mark one as the entry
+  point. For cases the visual builder doesn't cover (nested AND/OR/NOT
+  branch conditions), use "Advanced: edit as JSON" at the bottom -- the
+  builder and the JSON stay in sync either way.
 </p>
+
 <div class="card">
-  <form method="post" action="/admin/workflows" class="stacked-form">
-    <label>Name <input type="text" name="name" required></label>
+  <form method="post" action="/admin/workflows" class="stacked-form" id="wf-form">
+    <label>Name <input type="text" name="name" id="wf-name" value="{{ prefill_name }}" required></label>
     <label>
       Target system (for the final <code>SubmitTicket</code> step, if any)
-      <select name="target_system">
-        <option value="">(none)</option>
-        <option value="jira">jira</option>
-        <option value="glpi">glpi</option>
-        <option value="freshservice">freshservice</option>
-        <option value="webhook">webhook</option>
+      <select id="wf-target-system" name="target_system">
+        <option value="" {% if prefill_target_system == "" %}selected{% endif %}>(none)</option>
+        <option value="jira" {% if prefill_target_system == "jira" %}selected{% endif %}>jira</option>
+        <option value="glpi" {% if prefill_target_system == "glpi" %}selected{% endif %}>glpi</option>
+        <option value="freshservice" {% if prefill_target_system == "freshservice" %}selected{% endif %}>freshservice</option>
+        <option value="webhook" {% if prefill_target_system == "webhook" %}selected{% endif %}>webhook</option>
       </select>
     </label>
-    <label>
-      Step graph (JSON)
-      <textarea name="graph_json" rows="14" required>{
-  "entry_step_id": "ask_summary",
-  "steps": [
-    {
-      "id": "ask_summary",
-      "label": "What do you need?",
-      "kind": {
-        "type": "question",
-        "field_key": "summary",
-        "input_type": "text_area",
-        "required": true,
-        "options": [],
-        "next": "end_ok"
-      }
-    },
-    {
-      "id": "end_ok",
-      "label": "Done",
-      "kind": { "type": "end", "outcome": "completed" }
-    }
-  ]
-}</textarea>
-    </label>
-    <label>
-      Field mapping (JSON object, target field name -&gt; Tera template string; optional)
-      <textarea name="field_mapping_json" rows="4"></textarea>
-    </label>
-    <p class="hint">
-      Example: <code>{% raw %}{"summary": "{{ answers.summary }}"}{% endraw %}</code>
-    </p>
+
+    <div>
+      <div class="wf-toolbar">
+        <span class="hint">Add a step:</span>
+        <button type="button" class="secondary" data-add-step="question">+ Question</button>
+        <button type="button" class="secondary" data-add-step="branch">+ Branch</button>
+        <button type="button" class="secondary" data-add-step="wait_for_approval">+ Approval</button>
+        <button type="button" class="secondary" data-add-step="submit_ticket">+ Submit ticket</button>
+        <button type="button" class="secondary" data-add-step="end">+ End</button>
+      </div>
+      <p id="wf-builder-error" class="alert alert-error" hidden></p>
+      <div class="wf-canvas-viewport">
+        <div class="wf-canvas" id="wf-canvas">
+          <svg id="wf-arrows">
+            <defs>
+              <marker id="wf-arrowhead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" class="wf-arrowhead"></path>
+              </marker>
+              <marker id="wf-arrowhead-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" class="wf-arrowhead-green"></path>
+              </marker>
+              <marker id="wf-arrowhead-red" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0,0 L10,5 L0,10 z" class="wf-arrowhead-red"></path>
+              </marker>
+            </defs>
+            <g id="wf-arrows-content"></g>
+          </svg>
+        </div>
+      </div>
+      <datalist id="wf-field-keys"></datalist>
+    </div>
+
+    <details class="wf-advanced">
+      <summary>Advanced: edit as JSON</summary>
+      <label>
+        Step graph (JSON)
+        <textarea id="wf-graph-json" name="graph_json" rows="12">{{ prefill_graph_json }}</textarea>
+      </label>
+      <label>
+        Field mapping (JSON object, target field name -&gt; Tera template string; optional)
+        <textarea id="wf-field-mapping-json" name="field_mapping_json" rows="4">{{ prefill_field_mapping_json }}</textarea>
+      </label>
+      <p class="hint">
+        Example: <code>{% raw %}{"summary": "{{ answers.summary }}"}{% endraw %}</code>. The
+        step graph box above stays in sync with the builder automatically;
+        edit it by hand for cases the builder doesn't cover (like nested
+        AND/OR/NOT conditions) and click "Load JSON into builder" to bring
+        those changes back in. Field mapping has no visual editor -- it's
+        always just this JSON.
+      </p>
+      <button type="button" class="secondary" id="wf-load-json">Load JSON into builder</button>
+    </details>
+
     <button type="submit" class="primary">Create workflow</button>
   </form>
 </div>
+
+<select id="wf-users-source" hidden>
+  {% for u in users %}
+  <option value="{{ u.id }}">{{ u.display_name }} ({{ u.email }})</option>
+  {% endfor %}
+</select>
+
+<script src="/static/workflow_builder.js" defer></script>
 {% endblock %}

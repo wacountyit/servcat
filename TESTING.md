@@ -163,6 +163,53 @@ API; there is no frontend in this repo yet to click through.
       dispatch with a logged error and a `failed` ticket/instance status,
       not a crash.
 
+### Workflow graph builder (`/admin/workflows`)
+
+Automated: `18` unit-style assertions against the builder's pure
+serialization/hydration/validation logic pass in a headless JS engine
+(exercised while building this feature; not wired into CI). No browser
+was available in that session, so **the DOM-interaction parts below
+(dragging, live re-rendering, focus behavior) still need a real
+browser** -- please actually click through this section once.
+
+- [ ] Add one of each step kind (`+ Question`/`+ Branch`/`+ Approval`/
+      `+ Submit ticket`/`+ End`); each renders as a distinctly colored
+      node, and dragging a node's header moves it and its arrows live.
+- [ ] Wire `next`/`on_true`/`on_false`/`on_approve`/`on_reject` dropdowns
+      between steps and confirm arrows are drawn correctly, with
+      true/false and approve/reject labeled in green/red.
+- [ ] Click the star on a step to mark it the entry step; only one step
+      is ever marked at a time.
+- [ ] Delete a step that something else still points to -- confirm you
+      get a warning naming the referencing step(s) before it's removed.
+- [ ] For a `Question` step, switching "Input type" to `select`/
+      `multi_select` reveals an options editor (add/remove rows); other
+      input types hide it.
+- [ ] For a `Branch` step, build an `equals`/`not_equals`/`in` condition
+      of each value type (text/number/true-false) and confirm "Advanced:
+      edit as JSON" shows the expected shape (`{"op": "equals", ...}` with
+      a real JSON number/boolean, not a quoted string, for non-text
+      types).
+- [ ] For a `WaitForApproval` step, switch between all three approver
+      types (manager, role-in-department, specific person) and confirm
+      the right sub-fields appear; the person picker is populated from
+      real users.
+- [ ] Hand-edit "Advanced: edit as JSON" to add a nested `and`/`or`/`not`
+      branch condition, click "Load JSON into builder", and confirm that
+      branch step shows a "complex condition, not editable here" notice
+      but still lets you rewire its `on_true`/`on_false`; submitting
+      afterward preserves that condition unchanged.
+- [ ] Submit with no entry step set, a dangling reference, or a
+      duplicate step id -- confirm a clear inline error and no page
+      navigation (client-side validation should catch all three without
+      a round trip to the server).
+- [ ] Submit a workflow that fails *server-side* validation (e.g. hand-
+      edit the JSON to an invalid `target_system` after building a graph)
+      and confirm the re-rendered page's builder shows your graph exactly
+      as you left it, not a blank canvas.
+- [ ] A fresh (never-submitted) page load shows a small working two-step
+      starter example, not an empty canvas.
+
 ### Approval notifications
 
 - [ ] With `SMTP_HOST`/`SMTP_FROM_ADDRESS` unset, triggering an approval
