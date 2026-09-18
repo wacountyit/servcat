@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Edit {{ item.name }} - {{ layout.app_name }}{% endblock %}
+{% block content %}
+<h1>Edit catalog item</h1>
+{% include "admin/_subnav.html" %}
+
+{% if let Some(err) = error %}
+<p class="alert alert-error">{{ err }}</p>
+{% endif %}
+
+<div class="card">
+  <form method="post" action="/admin/catalog/{{ item.id }}/edit" class="stacked-form">
+    <label>Name <input type="text" name="name" value="{{ item.name }}" required></label>
+    <label>Summary (one sentence, shown on the catalog card)
+      <input type="text" name="summary" value="{% if let Some(summary) = item.summary %}{{ summary }}{% endif %}">
+    </label>
+    <label>Description
+      <textarea name="description" rows="3">{% if let Some(description) = item.description %}{{ description }}{% endif %}</textarea>
+    </label>
+    <div class="row-form">
+      <label>Category <input type="text" name="category" value="{% if let Some(category) = item.category %}{{ category }}{% endif %}"></label>
+      <label>Icon (emoji or short symbol) <input type="text" name="icon" maxlength="8" value="{% if let Some(icon) = item.icon %}{{ icon }}{% endif %}"></label>
+      <label>Approval label (shown to requesters) <input type="text" name="approval_label" value="{% if let Some(approval) = item.approval_label %}{{ approval }}{% endif %}"></label>
+    </div>
+    <div class="row-form">
+      <label>Target time <input type="number" name="target_value" min="0" value="{% if let Some(value) = item.target_value %}{{ value }}{% endif %}"></label>
+      <label>
+        Unit
+        <select name="target_unit">
+          <option value="">(none)</option>
+          {% if let Some(unit) = item.target_unit %}
+          <option value="minutes" {% if unit.as_str() == "minutes" %}selected{% endif %}>minutes</option>
+          <option value="hours" {% if unit.as_str() == "hours" %}selected{% endif %}>hours</option>
+          <option value="business_days" {% if unit.as_str() == "business_days" %}selected{% endif %}>business days</option>
+          <option value="calendar_days" {% if unit.as_str() == "calendar_days" %}selected{% endif %}>calendar days</option>
+          {% else %}
+          <option value="minutes">minutes</option>
+          <option value="hours">hours</option>
+          <option value="business_days">business days</option>
+          <option value="calendar_days">calendar days</option>
+          {% endif %}
+        </select>
+      </label>
+    </div>
+    <p class="hint">
+      A target is a goal, not a guarantee -- shown to requesters as "Typical
+      turnaround: &hellip;". Leave both fields blank to leave the existing
+      target unchanged; set both to change it.
+    </p>
+    <label>What's included (one per line) <textarea name="included" rows="3">{{ details.included|join("\n") }}</textarea></label>
+    <label>What's not included / when not to use this (one per line) <textarea name="not_included" rows="3">{{ details.not_included|join("\n") }}</textarea></label>
+    <label>What you'll need to provide (one per line) <textarea name="needed" rows="3">{{ details.needed|join("\n") }}</textarea></label>
+    <label>Search keywords/aliases (one per line) <textarea name="keywords" rows="2">{{ details.keywords|join("\n") }}</textarea></label>
+    <label class="wf-form-row"><input type="checkbox" name="is_active" value="true" {% if item.is_active %}checked{% endif %}> Published (visible to requesters)</label>
+    <div class="row-form">
+      <button type="submit" class="primary">Save changes</button>
+      <a href="/admin/catalog" class="button-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

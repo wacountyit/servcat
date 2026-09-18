@@ -1,4 +1,5 @@
 mod auth;
+mod catalog_seed;
 mod config;
 mod connector_registry;
 mod error;
@@ -13,7 +14,7 @@ mod web;
 
 use std::{sync::Arc, time::Duration};
 
-use servcat_db::repositories::{org_settings, users};
+use servcat_db::repositories::{catalog, org_settings, users};
 use servcat_model::{NewUser, Role};
 use tokio::signal;
 use tracing_subscriber::EnvFilter;
@@ -39,6 +40,7 @@ async fn main() -> anyhow::Result<()> {
     let pool = servcat_db::connect_and_migrate(&config.database_url).await?;
 
     bootstrap_admin(&pool, &config).await?;
+    auto_seed_catalog(&pool).await?;
     org_settings::seed_default(
         &pool,
         config.bootstrap_app_name.as_deref(),
@@ -144,6 +146,34 @@ async fn bootstrap_admin(pool: &servcat_db::Pool, config: &AppConfig) -> anyhow:
     .await?;
 
     tracing::warn!(%email, "created bootstrap admin account -- rotate its password and/or disable it once real admins exist");
+    Ok(())
+}
+
+/// Loads the starter IT service catalog the first time the server starts
+/// against a database with no catalog items at all (no-op afterward, even
+/// if every seeded item is later edited or deactivated -- see
+/// `catalog_seed` for the by-slug idempotency this relies on). Attributed
+/// to whichever admin account happens to exist yet; skipped entirely if
+/// none does yet, same as `bootstrap_admin` requires configured
+/// credentials to create one.
+async fn auto_seed_catalog(pool: &servcat_db::Pool) -> anyhow::Result<()> {
+    if !catalog::list(pool, true).await?.is_empty() {
+        return Ok(());
+    }
+    let Some(admin) = users::list(pool, true)
+        .await?
+        .into_iter()
+        .find(|u| u.role == Role::Admin)
+    else {
+        return Ok(());
+    };
+
+    let summary = catalog_seed::run(pool, admin.id).await?;
+    tracing::info!(
+        added = summary.added,
+        skipped = summary.skipped,
+        "seeded starter IT service catalog"
+    );
     Ok(())
 }
 

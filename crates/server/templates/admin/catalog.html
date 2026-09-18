@@ -4,22 +4,34 @@
 <h1>Manage catalog</h1>
 {% include "admin/_subnav.html" %}
 
+{% if let Some(msg) = seed_message %}
+<p class="alert {% if msg.starts_with("Couldn't save") %}alert-error{% else %}alert-success{% endif %}">{{ msg }}</p>
+{% endif %}
+
 <table>
-  <thead><tr><th>Name</th><th>Category</th><th>Status</th><th></th></tr></thead>
+  <thead><tr><th>Name</th><th>Category</th><th>Target</th><th>Approval</th><th>Status</th><th></th></tr></thead>
   <tbody>
+    {% if items.is_empty() %}
+    <tr><td colspan="6" class="hint">No catalog items yet. Load the starter catalog or add one below.</td></tr>
+    {% endif %}
     {% for item in items %}
     <tr>
       <td>{{ item.name }}</td>
       <td>{% if let Some(category) = item.category %}{{ category }}{% endif %}</td>
-      <td>{% if item.is_active %}Active{% else %}Inactive{% endif %}</td>
+      <td>{% if let Some(target) = item.target_display() %}{{ target }}{% endif %}</td>
+      <td>{% if let Some(approval) = item.approval_label %}{{ approval }}{% endif %}</td>
       <td>
+        {% if item.is_active %}Active{% else %}<span class="badge">Draft</span>{% endif %}
+      </td>
+      <td class="row-form">
+        <a href="/admin/catalog/{{ item.id }}/edit" class="button-secondary">Edit</a>
         <form method="post" action="/admin/catalog/{{ item.id }}/toggle" class="inline-form">
           {% if item.is_active %}
           <input type="hidden" name="is_active" value="false">
           <button type="submit" class="danger">Deactivate</button>
           {% else %}
           <input type="hidden" name="is_active" value="true">
-          <button type="submit" class="secondary">Reactivate</button>
+          <button type="submit" class="secondary">Publish</button>
           {% endif %}
         </form>
       </td>
@@ -28,6 +40,16 @@
   </tbody>
 </table>
 
+<div class="row-form" style="margin-top:14px">
+  <form method="post" action="/admin/catalog/load-starter" class="inline-form">
+    <button type="submit" class="secondary">Load starter catalog</button>
+  </form>
+  <span class="hint">
+    Adds any of the {{ seed_item_count }} starter items you don't already
+    have; never overwrites items you've edited or removed.
+  </span>
+</div>
+
 <h2>Add a catalog item</h2>
 {% if workflow_definitions.is_empty() %}
 <p class="hint">Create a workflow definition first.</p>
@@ -35,8 +57,31 @@
 <div class="card">
   <form method="post" action="/admin/catalog" class="stacked-form">
     <label>Name <input type="text" name="name" required></label>
+    <label>Summary (one sentence, shown on the catalog card) <input type="text" name="summary"></label>
     <label>Description <textarea name="description" rows="2"></textarea></label>
-    <label>Category <input type="text" name="category"></label>
+    <div class="row-form">
+      <label>Category <input type="text" name="category"></label>
+      <label>Icon (emoji or short symbol) <input type="text" name="icon" maxlength="8"></label>
+      <label>Approval label (shown to requesters, e.g. "Manager approval") <input type="text" name="approval_label"></label>
+    </div>
+    <div class="row-form">
+      <label>Target time <input type="number" name="target_value" min="0"></label>
+      <label>
+        Unit
+        <select name="target_unit">
+          <option value="">(none)</option>
+          <option value="minutes">minutes</option>
+          <option value="hours">hours</option>
+          <option value="business_days">business days</option>
+          <option value="calendar_days">calendar days</option>
+        </select>
+      </label>
+    </div>
+    <p class="hint">A target is a goal, not a guarantee -- shown to requesters as "Typical turnaround: &hellip;".</p>
+    <label>What's included (one per line) <textarea name="included" rows="3"></textarea></label>
+    <label>What's not included / when not to use this (one per line) <textarea name="not_included" rows="3"></textarea></label>
+    <label>What you'll need to provide (one per line) <textarea name="needed" rows="3"></textarea></label>
+    <label>Search keywords/aliases (one per line) <textarea name="keywords" rows="2"></textarea></label>
     <label>
       Workflow
       <select name="workflow_definition_id" required>

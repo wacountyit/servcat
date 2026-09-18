@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ item.name }} - {{ layout.app_name }}{% endblock %}
+{% block content %}
+<p class="hint"><a href="/catalog">&larr; Back to catalog</a></p>
+
+<div class="catalog-item-header">
+  {% if let Some(icon) = item.icon %}<span class="catalog-card-icon" aria-hidden="true">{{ icon }}</span>{% endif %}
+  <div>
+    <h1 style="margin-bottom:4px">{{ item.name }}</h1>
+    {% if let Some(category) = item.category %}<p class="hint" style="margin:0">{{ category }}</p>{% endif %}
+  </div>
+</div>
+
+<div class="catalog-card-badges" style="margin: 10px 0 20px">
+  {% if let Some(target) = item.target_display() %}<span class="badge">Typical turnaround: {{ target }} (a target, not a guarantee)</span>{% endif %}
+  {% if let Some(approval) = item.approval_label %}<span class="badge">{{ approval }}</span>{% endif %}
+</div>
+
+<div class="catalog-item-layout">
+  <div>
+    {% if let Some(description) = item.description %}<p>{{ description }}</p>{% endif %}
+
+    {% if !details.included.is_empty() %}
+    <h2>What's included</h2>
+    <ul>
+      {% for line in details.included %}<li>{{ line }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if !details.not_included.is_empty() %}
+    <h2>What's not included</h2>
+    <ul>
+      {% for line in details.not_included %}<li>{{ line }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if !details.needed.is_empty() %}
+    <h2>What you'll need to provide</h2>
+    <ul>
+      {% for line in details.needed %}<li>{{ line }}</li>{% endfor %}
+    </ul>
+    {% endif %}
+
+    {% if !questions.is_empty() %}
+    <h2>What you'll be asked</h2>
+    <p class="hint">After you click Request, you'll fill this in one question at a time.</p>
+    <ul>
+      {% for question in questions %}
+      <li>{{ question.label }}{% if !question.required %} <span class="hint">(optional)</span>{% endif %}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+
+  <div class="card catalog-item-sidebar">
+    <form method="post" action="/catalog/{{ item.id }}/request">
+      <button type="submit" class="primary" style="width:100%">Request this service</button>
+    </form>
+  </div>
+</div>
+{% endblock %}

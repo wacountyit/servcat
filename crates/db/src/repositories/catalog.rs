@@ -1,10 +1,12 @@
 use servcat_model::{NewServiceCatalogItem, ServiceCatalogItem, UpdateServiceCatalogItem};
+use sqlx::types::Json;
 use uuid::Uuid;
 
 use crate::{DbError, Pool};
 
-const SELECT: &str = "SELECT id, name, description, category, icon, workflow_definition_id, \
-     is_active, created_by, created_at, updated_at FROM service_catalog_items";
+const SELECT: &str = "SELECT id, slug, name, description, summary, details_json, approval_label, \
+     target_value, target_unit, category, icon, sort_order, workflow_definition_id, is_active, \
+     created_by, created_at, updated_at FROM service_catalog_items";
 
 pub async fn create(
     pool: &Pool,
@@ -14,14 +16,22 @@ pub async fn create(
     let id = Uuid::new_v4();
     sqlx::query(
         "INSERT INTO service_catalog_items \
-         (id, name, description, category, icon, workflow_definition_id, created_by) \
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+         (id, slug, name, description, summary, details_json, approval_label, target_value, \
+          target_unit, category, icon, sort_order, workflow_definition_id, created_by) \
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
     .bind(id)
+    .bind(&new.slug)
     .bind(&new.name)
     .bind(&new.description)
+    .bind(&new.summary)
+    .bind(new.details.as_ref().map(Json))
+    .bind(&new.approval_label)
+    .bind(new.target_value)
+    .bind(new.target_unit)
     .bind(&new.category)
     .bind(&new.icon)
+    .bind(new.sort_order)
     .bind(new.workflow_definition_id)
     .bind(created_by)
     .execute(pool)
@@ -41,13 +51,24 @@ pub async fn get_by_id(pool: &Pool, id: Uuid) -> Result<Option<ServiceCatalogIte
     Ok(item)
 }
 
+/// Used by the starter-catalog seed to decide whether an item has already
+/// been seeded (in which case it's skipped entirely, even if an admin has
+/// since edited or deactivated it -- see `crate` root docs on seeding).
+pub async fn get_by_slug(pool: &Pool, slug: &str) -> Result<Option<ServiceCatalogItem>, DbError> {
+    let item = sqlx::query_as::<_, ServiceCatalogItem>(&format!("{SELECT} WHERE slug = ?"))
+        .bind(slug)
+        .fetch_optional(pool)
+        .await?;
+    Ok(item)
+}
+
 /// Items visible on the self-service catalog. Admins pass
 /// `include_inactive = true` to manage draft/retired items too.
 pub async fn list(pool: &Pool, include_inactive: bool) -> Result<Vec<ServiceCatalogItem>, DbError> {
     let sql = if include_inactive {
-        format!("{SELECT} ORDER BY category, name")
+        format!("{SELECT} ORDER BY category, sort_order, name")
     } else {
-        format!("{SELECT} WHERE is_active = TRUE ORDER BY category, name")
+        format!("{SELECT} WHERE is_active = TRUE ORDER BY category, sort_order, name")
     };
     let items = sqlx::query_as::<_, ServiceCatalogItem>(&sql)
         .fetch_all(pool)
@@ -64,15 +85,27 @@ pub async fn update(
         "UPDATE service_catalog_items SET \
             name = COALESCE(?, name), \
             description = COALESCE(?, description), \
+            summary = COALESCE(?, summary), \
+            details_json = COALESCE(?, details_json), \
+            approval_label = COALESCE(?, approval_label), \
+            target_value = COALESCE(?, target_value), \
+            target_unit = COALESCE(?, target_unit), \
             category = COALESCE(?, category), \
             icon = COALESCE(?, icon), \
+            sort_order = COALESCE(?, sort_order), \
             is_active = COALESCE(?, is_active) \
          WHERE id = ?",
     )
     .bind(&patch.name)
     .bind(&patch.description)
+    .bind(&patch.summary)
+    .bind(patch.details.as_ref().map(Json))
+    .bind(&patch.approval_label)
+    .bind(patch.target_value)
+    .bind(patch.target_unit)
     .bind(&patch.category)
     .bind(&patch.icon)
+    .bind(patch.sort_order)
     .bind(patch.is_active)
     .bind(id)
     .execute(pool)
